@@ -1,18 +1,5 @@
-# Build
 bin/
 obj/
 *.user
-*.suo
 .vs/
-*.exe
-*.dll
-*.pdb
-
-# Local config / secrets
 machines.json
-*.local.json
-
-# OS
-Thumbs.db
-Desktop.ini
-.DS_Store

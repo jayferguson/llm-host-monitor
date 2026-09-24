@@ -20,6 +20,7 @@ public sealed class MainForm : Form
         BackColor = Color.FromArgb(8, 11, 16);
         ForeColor = Color.WhiteSmoke;
         Font = new Font("Segoe UI", 9.5f);
+        DoubleBuffered = true;
 
         var toolbar = new Panel
         {
@@ -213,7 +214,6 @@ public sealed class MainForm : Form
         var gen = ++_generation;
         try
         {
-            _status.Text = "polling.";
             var machines = _config.Machines.Where(m => m.Enabled).ToList();
             var tasks = machines.Select(async m =>
             {
@@ -237,7 +237,9 @@ public sealed class MainForm : Form
                     card.Apply(st);
             }
             var up = results.Count(r => r.MetricsOk || r.LlmOk);
-            _status.Text = $"{up}/{results.Length} up  ·  {DateTime.Now:HH:mm:ss}";
+            var nextStatus = $"{up}/{results.Length} up";
+            if (!string.Equals(_status.Text, nextStatus, StringComparison.Ordinal))
+                _status.Text = nextStatus;
         }
         finally
         {

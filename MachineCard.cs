@@ -15,6 +15,7 @@ public sealed class MachineCard : Panel
     {
         MachineId = cfg.Id;
         DoubleBuffered = true;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
         Margin = new Padding(0, 0, 0, 6);
         Padding = new Padding(8, 6, 8, 6);
         MinimumSize = new Size(280, 56);
@@ -158,10 +159,11 @@ public sealed class MachineCard : Panel
     public void Apply(HostStatus status)
     {
         _last = status;
-        _title.Text = status.Name.ToUpperInvariant();
-        _model.Text = string.IsNullOrWhiteSpace(status.ModelLabel)
+        SetText(_title, status.Name.ToUpperInvariant());
+        var model = string.IsNullOrWhiteSpace(status.ModelLabel)
             ? (string.IsNullOrWhiteSpace(status.Model) ? "-" : status.Model)
             : status.ModelLabel;
+        SetText(_model, model);
 
         string state;
         Color border;
@@ -190,30 +192,117 @@ public sealed class MachineCard : Panel
             stateColor = Color.FromArgb(140, 160, 180);
         }
 
-        BackColor = bg;
+        if (BackColor != bg) BackColor = bg;
         Tag = border;
-        _state.Text = state;
-        _state.ForeColor = stateColor;
-        _title.ForeColor = stateColor;
-        _model.ForeColor = status.Active ? Color.FromArgb(216, 255, 232) : Color.FromArgb(230, 236, 245);
+        SetText(_state, state);
+        if (_state.ForeColor != stateColor) _state.ForeColor = stateColor;
+        if (_title.ForeColor != stateColor) _title.ForeColor = stateColor;
+        var modelColor = status.Active ? Color.FromArgb(216, 255, 232) : Color.FromArgb(230, 236, 245);
+        if (_model.ForeColor != modelColor) _model.ForeColor = modelColor;
 
         if (!string.IsNullOrWhiteSpace(status.Error) && (!status.MetricsOk || !status.LlmOk))
         {
-            _error.Text = status.Error;
-            _error.Visible = true;
+            SetText(_error, status.Error);
+            if (!_error.Visible) _error.Visible = true;
         }
-        else
+        else if (_error.Visible)
         {
             _error.Visible = false;
-            _error.Text = "";
+            SetText(_error, "");
         }
 
-        _gpus.Controls.Clear();
-        foreach (var g in status.Gpus)
-            _gpus.Controls.Add(BuildGpuChip(g));
+        var structureChanged = SyncGpuChips(status.Gpus);
+        if (structureChanged || _error.Visible != _lastErrorVisible)
+        {
+            _lastErrorVisible = _error.Visible;
+            LayoutHeader();
+        }
+    }
 
-        LayoutHeader();
-        Invalidate();
+    private bool _lastErrorVisible;
+
+    private static void SetText(Label label, string text)
+    {
+        if (!string.Equals(label.Text, text, StringComparison.Ordinal))
+            label.Text = text;
+    }
+
+    private bool SyncGpuChips(IReadOnlyList<GpuInfo> gpus)
+    {
+        // Rebuild only when GPU count/identity changes; otherwise update meters in place.
+        var needRebuild = _gpus.Controls.Count != gpus.Count;
+        if (!needRebuild)
+        {
+            for (var i = 0; i < gpus.Count; i++)
+            {
+                var name = FindTagged(_gpus.Controls[i], "gpu-name") as Label;
+                if (name is null || !string.Equals(name.Text, gpus[i].Name, StringComparison.Ordinal))
+                {
+                    needRebuild = true;
+                    break;
+                }
+            }
+        }
+
+        if (needRebuild)
+        {
+            _gpus.SuspendLayout();
+            _gpus.Controls.Clear();
+            foreach (var g in gpus)
+                _gpus.Controls.Add(BuildGpuChip(g));
+            _gpus.ResumeLayout(true);
+            StretchGpuChips();
+            return true;
+        }
+
+        for (var i = 0; i < gpus.Count; i++)
+            UpdateGpuChip(_gpus.Controls[i], gpus[i]);
+        return false;
+    }
+
+    private static void UpdateGpuChip(Control chip, GpuInfo g)
+    {
+        foreach (Control c in chip.Controls)
+        {
+            if (c is Label meta && meta.Tag as string == "gpu-power")
+            {
+                var text = (g.TempC is double t ? $"{t:0}\u00b0C" : "-") + "  " + (g.PowerW is double w ? $"{w:0}W" : "-");
+                if (!string.Equals(meta.Text, text, StringComparison.Ordinal))
+                {
+                    meta.Text = text;
+                    meta.ForeColor = TempColor(g.TempC);
+                }
+            }
+            if (c is Panel wrap && wrap.Tag as string == "vram")
+                UpdateMeter(wrap, g.VramPct, "VRAM");
+            if (c is Panel wrap2 && wrap2.Tag as string == "util")
+                UpdateMeter(wrap2, g.UtilPct, "util");
+        }
+    }
+
+    private static void UpdateMeter(Control wrap, double? pct, string kind)
+    {
+        foreach (Control inner in wrap.Controls)
+        {
+            if (inner is Panel track)
+            {
+                track.Tag = pct ?? 0.0;
+                var fillW = pct is double p ? (int)Math.Round(Math.Clamp(p, 0, 100) / 100.0 * track.Width) : 0;
+                if (track.Controls.Count > 0)
+                {
+                    var fill = track.Controls[0];
+                    if (fill.Width != fillW) fill.Width = fillW;
+                    var tone = Tone(kind, pct);
+                    if (fill.BackColor != tone) fill.BackColor = tone;
+                }
+            }
+            if (inner is Label val && val.TextAlign == ContentAlignment.MiddleRight)
+            {
+                var text = pct is double v ? $"{v:0}%" : "-";
+                if (!string.Equals(val.Text, text, StringComparison.Ordinal))
+                    val.Text = text;
+            }
+        }
     }
 
     protected override void OnPaint(PaintEventArgs e)
