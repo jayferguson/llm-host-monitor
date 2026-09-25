@@ -1,0 +1,44 @@
+# systemd unit for llama.cpp llama-server.
+# Replace the @PLACEHOLDERS@ (or use install-llama-server.sh), then:
+#   sudo cp llama-server.service.example /etc/systemd/system/llama-server.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now llama-server
+#
+# @USER@       account that runs the server, e.g. llm (needs read access to the model)
+# @LLAMA_BIN@  path to the llama-server binary, e.g. /opt/llama.cpp/build/bin/llama-server
+# @MODEL@      path to the GGUF file, e.g. /models/qwen3-coder-30b-a3b-q4_k_m.gguf
+# @ALIAS@      model name reported by /v1/models, e.g. qwen3-coder-30b
+# @CTX@        context size in tokens, e.g. 32768 (reported as meta.n_ctx)
+
+[Unit]
+Description=llama.cpp llama-server (@ALIAS@)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+# Flag notes:
+#   -ngl 99                  offload all layers to the GPU(s)
+#   -np 1                    one parallel slot (the whole context goes to one request)
+#   -fa on                   flash attention (needed for a quantized V cache)
+#   --cache-type-k/v q4_0    4-bit KV cache to fit more context in VRAM
+#   --temp / --top-p         default sampling; clients can override per request
+#   -b / -ub                 batch and micro-batch sizes
+#   --metrics                also expose llama.cpp's own Prometheus metrics at /metrics
+# Multi-GPU: add a --tensor-split line to split the model across cards, e.g. two equal GPUs:
+#   --tensor-split 50,50 \
+ExecStart="@LLAMA_BIN@" \
+  -m "@MODEL@" \
+  --alias @ALIAS@ \
+  --host 0.0.0.0 --port 8080 \
+  -ngl 99 \
+  -c @CTX@ -np 1 \
+  -fa on --cache-type-k q4_0 --cache-type-v q4_0 \
+  --jinja --temp 0.2 --top-p 0.95 \
+  -b 512 -ub 256 \
+  --metrics
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
