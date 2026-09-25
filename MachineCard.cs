@@ -163,7 +163,7 @@ public sealed class MachineCard : Panel
         var model = string.IsNullOrWhiteSpace(status.ModelLabel)
             ? (string.IsNullOrWhiteSpace(status.Model) ? "-" : status.Model)
             : status.ModelLabel;
-        SetText(_model, model);
+        SetText(_model, FormatHeaderModel(model, status.TotalVramBytes, status.ContextTokens));
 
         string state;
         Color border;
@@ -221,6 +221,23 @@ public sealed class MachineCard : Panel
 
     private bool _lastErrorVisible;
 
+
+    private static string FormatHeaderModel(string model, long? totalVramBytes, int? contextTokens)
+    {
+        var parts = new List<string> { model };
+        if (totalVramBytes is long bytes && bytes > 0)
+        {
+            var gib = bytes / (1024.0 * 1024.0 * 1024.0);
+            parts.Add(gib >= 10 ? $"{gib:0} GB" : $"{gib:0.#} GB");
+        }
+        if (contextTokens is int ctx && ctx > 0)
+        {
+            if (ctx >= 1024 && ctx % 1024 == 0) parts.Add($"{ctx / 1024}k ctx");
+            else if (ctx >= 1000) parts.Add($"{ctx / 1000.0:0.#}k ctx");
+            else parts.Add($"{ctx} ctx");
+        }
+        return string.Join("  ", parts);
+    }
     private static void SetText(Label label, string text)
     {
         if (!string.Equals(label.Text, text, StringComparison.Ordinal))

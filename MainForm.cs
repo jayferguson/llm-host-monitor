@@ -10,6 +10,21 @@ public sealed class MainForm : Form
     private int _generation;
     private bool _busy;
     private static readonly Font IconFont = new(PickIconFamily(), 11f);
+    private readonly Button _pinBtn;
+    private readonly ToolTip _pinTips;
+
+    private void SetAlwaysOnTop(bool on, bool save)
+    {
+        TopMost = on;
+        _pinBtn.Text = on ? "\uE841" : "\uE718";
+        _pinBtn.BackColor = on ? Color.FromArgb(90, 74, 30) : Color.FromArgb(32, 42, 58);
+        _pinTips.SetToolTip(_pinBtn, on ? "Always on top: on (click to turn off)" : "Always on top: off (click to turn on)");
+        if (save && _config.AlwaysOnTop != on)
+        {
+            _config.AlwaysOnTop = on;
+            MachineStore.Save(_config);
+        }
+    }
 
     public MainForm()
     {
@@ -44,12 +59,15 @@ public sealed class MainForm : Form
         var refreshBtn = MakeIconBtn("\uE72C", 116, Color.FromArgb(140, 190, 230));
         tips.SetToolTip(refreshBtn, "Refresh now");
         refreshBtn.Click += async (_, _) => await PollOnceAsync();
+        _pinBtn = MakeIconBtn("\uE718", 152, Color.FromArgb(230, 200, 90));
+        _pinTips = tips;
+        _pinBtn.Click += (_, _) => SetAlwaysOnTop(!TopMost, save: true);
 
         _status = new Label
         {
             AutoSize = true,
             ForeColor = Color.FromArgb(140, 160, 180),
-            Location = new Point(160, 12),
+            Location = new Point(196, 12),
             Text = "starting.",
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
         };
@@ -58,10 +76,11 @@ public sealed class MainForm : Form
         toolbar.Controls.Add(editBtn);
         toolbar.Controls.Add(removeBtn);
         toolbar.Controls.Add(refreshBtn);
+        toolbar.Controls.Add(_pinBtn);
         toolbar.Controls.Add(_status);
         toolbar.Resize += (_, _) =>
         {
-            _status.Left = Math.Max(160, toolbar.Width - _status.PreferredWidth - 12);
+            _status.Left = Math.Max(196, toolbar.Width - _status.PreferredWidth - 12);
         };
 
         _list = new Panel
@@ -77,6 +96,7 @@ public sealed class MainForm : Form
         Controls.Add(toolbar);
 
         _config = MachineStore.Load();
+        SetAlwaysOnTop(_config.AlwaysOnTop, save: false);
         RebuildCards();
 
         _timer = new System.Windows.Forms.Timer { Interval = Math.Max(2, _config.PollSeconds) * 1000 };

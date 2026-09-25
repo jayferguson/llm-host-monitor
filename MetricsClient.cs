@@ -47,6 +47,8 @@ public static class MetricsClient
             status.Gpus = ParsePrometheus(text);
             status.MetricsOk = status.Gpus.Count > 0;
             status.Active = status.Gpus.Any(IsActive);
+            var vramSum = status.Gpus.Where(g => g.VramTotalBytes is > 0).Sum(g => g.VramTotalBytes!.Value);
+            if (vramSum > 0) status.TotalVramBytes = vramSum;
             if (!status.MetricsOk) errors.Add("no GPUs in metrics");
         }
         catch (Exception ex)
@@ -67,6 +69,13 @@ public static class MetricsClient
                     if (row.TryGetProperty("id", out var idEl))
                     {
                         status.Model = idEl.GetString() ?? "";
+                        if (row.TryGetProperty("meta", out var meta) && meta.ValueKind == JsonValueKind.Object)
+                        {
+                            if (meta.TryGetProperty("n_ctx", out var nCtx) && nCtx.TryGetInt32(out var ctx))
+                                status.ContextTokens = ctx;
+                            else if (meta.TryGetProperty("n_ctx", out var nCtx64) && nCtx64.TryGetInt64(out var ctx64))
+                                status.ContextTokens = (int)ctx64;
+                        }
                         break;
                     }
                 }
@@ -167,6 +176,7 @@ public static class MetricsClient
             Index = index,
             Uuid = raw.TryGetValue("uuid", out var uo) ? uo?.ToString() ?? "" : "",
             VramPct = vramPct is double vp ? Math.Round(vp, 1) : null,
+            VramTotalBytes = total is double tb && tb > 0 ? (long)tb : null,
             UtilPct = utilPct is double up ? Math.Round(up, 1) : null,
             TempC = temp is double tc ? Math.Round(tc, 0) : null,
             PowerW = power is double pw ? Math.Round(pw, 1) : null,
