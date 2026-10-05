@@ -12,6 +12,9 @@ public sealed class MachineCard : Panel
 
     public string MachineId { get; }
 
+    /// <summary>Shrink-wrap height for the card contents (header + GPU row/stack).</summary>
+    public int PreferredContentHeight { get; private set; } = 56;
+
     public MachineCard(MachineConfig cfg)
     {
         MachineId = cfg.Id;
@@ -77,49 +80,36 @@ public sealed class MachineCard : Panel
     {
         if (_columnMode == column) { LayoutHeader(); return; }
         _columnMode = column;
-        MinimumSize = column ? new Size(220, 120) : new Size(280, 56);
+        // Horizontal (column) mode: compact height; GPUs sit in one row.
+        MinimumSize = column ? new Size(200, 56) : new Size(280, 56);
         Margin = column ? new Padding(0, 0, 6, 0) : new Padding(0, 0, 0, 6);
         LayoutHeader();
     }
+
     private void LayoutHeader()
     {
-        if (_columnMode)
-        {
-            // Column: title + state on top, model below, then GPUs stacked.
-            _title.Location = new Point(8, 6);
-            _title.MaximumSize = new Size(Math.Max(60, Width - _state.PreferredWidth - 28), 0);
-            _state.Location = new Point(Math.Max(_title.Right + 8, Width - _state.PreferredWidth - 12), 7);
-            _model.MaximumSize = new Size(Math.Max(80, Width - 20), 0);
-            _model.Location = new Point(8, Math.Max(26, _title.Bottom + 2));
-            _error.Width = Math.Max(80, Width - 20);
-            _error.Location = new Point(8, _model.Bottom + 2);
-            var gpusTop = _error.Visible ? _error.Bottom + 4 : _model.Bottom + 6;
-            _gpus.Location = new Point(6, gpusTop);
-            _gpus.Width = Math.Max(80, ClientSize.Width - 12);
-            StretchGpuChips();
-            // Fill parent height when docked as a column; don't shrink-wrap.
-            if (Dock == DockStyle.Left || Dock == DockStyle.Fill)
-                return;
-            var bottom = _gpus.Controls.Count == 0 ? gpusTop + 4 : _gpus.Bottom;
-            Height = Math.Max(120, bottom + 8);
-            return;
-        }
-
-        // Row: title | model ........ state, GPUs below.
+        // Both modes: single-line header (name | model ........ state).
         _title.MaximumSize = Size.Empty;
         _title.Location = new Point(8, 6);
+        _model.MaximumSize = Size.Empty;
         _model.Location = new Point(_title.Right + 10, 6);
         _state.Location = new Point(Math.Max(_model.Right + 8, Width - _state.PreferredWidth - 12), 7);
         var maxModel = Math.Max(40, _state.Left - _model.Left - 8);
         _model.MaximumSize = new Size(maxModel, 0);
+
         _error.Width = Math.Max(80, Width - 20);
         _error.Location = new Point(8, 26);
-        var gpusTopRow = _error.Visible ? 44 : 28;
-        _gpus.Location = new Point(6, gpusTopRow);
+        var gpusTop = _error.Visible ? 44 : 28;
+        _gpus.Location = new Point(6, gpusTop);
         _gpus.Width = Math.Max(80, ClientSize.Width - 12);
         StretchGpuChips();
-        var bottomRow = _gpus.Controls.Count == 0 ? gpusTopRow + 4 : _gpus.Bottom;
-        Height = Math.Max(56, bottomRow + 8);
+
+        var bottom = _gpus.Controls.Count == 0 ? gpusTop + 4 : _gpus.Bottom;
+        PreferredContentHeight = Math.Max(56, bottom + 8);
+
+        // Dock.Left stretches to parent height; only set Height when not dock-filling.
+        if (Dock != DockStyle.Left && Dock != DockStyle.Fill)
+            Height = PreferredContentHeight;
     }
 
     private void StretchGpuChips()
@@ -133,6 +123,24 @@ public sealed class MachineCard : Panel
         const int gap = 4;
         const int chipH = 32;
         var avail = Math.Max(160, _gpus.ClientSize.Width);
+
+        if (_columnMode)
+        {
+            // Side-by-side devices in one row (minimize vertical space).
+            var chipW = Math.Max(168, (avail - Math.Max(0, n - 1) * gap) / n);
+            for (var i = 0; i < n; i++)
+            {
+                var chip = _gpus.Controls[i];
+                chip.Margin = Padding.Empty;
+                chip.Location = new Point(i * (chipW + gap), 0);
+                chip.Size = new Size(chipW, chipH);
+                ResizeChipContents(chip, chipW);
+            }
+            _gpus.Height = chipH;
+            return;
+        }
+
+        // Vertical: devices stacked.
         for (var i = 0; i < n; i++)
         {
             var chip = _gpus.Controls[i];
@@ -146,22 +154,31 @@ public sealed class MachineCard : Panel
 
     private static void ResizeChipContents(Control chip, int width)
     {
+        Label? power = null;
+        foreach (Control c in chip.Controls)
+        {
+            if (c is Label pwr && pwr.Tag as string == "gpu-power")
+                power = pwr;
+        }
+        var powerW = power?.PreferredWidth ?? 56;
+        // Keep temp/power fully visible inside the chip.
+        if (power is not null)
+            power.Left = Math.Max(70, width - powerW - 6);
+
         foreach (Control c in chip.Controls)
         {
             if (c is Label lab && lab.Tag as string == "gpu-name")
-                lab.Width = Math.Max(50, width - 86);
-            if (c is Label pwr && pwr.Tag as string == "gpu-power")
-                pwr.Left = Math.Max(80, width - 40);
+                lab.Width = Math.Max(40, width - powerW - 18);
             if (c is Panel wrap && wrap.Tag as string == "vram")
             {
-                wrap.Width = Math.Max(70, (width - 96) / 2);
+                wrap.Width = Math.Max(70, (width - 12) / 2 - 3);
                 SizeMeter(wrap);
             }
             if (c is Panel wrap2 && wrap2.Tag as string == "util")
             {
                 var vram = FindTagged(chip, "vram");
                 wrap2.Left = (vram?.Right ?? 96) + 6;
-                wrap2.Width = Math.Max(70, width - wrap2.Left - 8);
+                wrap2.Width = Math.Max(70, width - wrap2.Left - 6);
                 SizeMeter(wrap2);
             }
         }
@@ -180,12 +197,12 @@ public sealed class MachineCard : Panel
         {
             if (inner is Panel track && track.Tag is double pct)
             {
-                track.Width = Math.Max(30, wrap.Width - 72);
+                track.Width = Math.Max(24, wrap.Width - 68);
                 if (track.Controls.Count > 0)
                     track.Controls[0].Width = (int)Math.Round(Math.Clamp(pct, 0, 100) / 100.0 * track.Width);
             }
             if (inner is Label val && val.TextAlign == ContentAlignment.MiddleRight)
-                val.Left = Math.Max(40, wrap.Width - 32);
+                val.Left = Math.Max(40, wrap.Width - val.Width - 2);
         }
     }
 
@@ -435,7 +452,7 @@ public sealed class MachineCard : Panel
         var val = new Label
         {
             AutoSize = false,
-            Size = new Size(30, 12),
+            Size = new Size(34, 12),
             Location = new Point(108, 0),
             Font = new Font("Consolas", 7f),
             ForeColor = Color.FromArgb(200, 210, 220),
@@ -470,4 +487,3 @@ public sealed class MachineCard : Panel
         return Color.FromArgb(140, 160, 180);
     }
 }
-

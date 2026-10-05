@@ -5,9 +5,16 @@ A small Windows desktop app that shows the status of your local LLM hosts as a v
 It is built for Linux boxes running [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` on NVIDIA GPUs.
 
 
-## Layout
+## Layout and controls
 
-Toolbar layout button (next to the always-on-top pin) toggles **rows** (systems stacked) vs **columns** (systems side by side). The choice is stored in `%AppData%\LlmHostMonitor\machines.json` as `horizontalLayout`, same file as `alwaysOnTop`.
+There is no toolbar. **Right-click** the window or a host card for the menu (left-click on empty background also opens it):
+
+- Add / Edit / Remove machine, Refresh now
+- **Always on top** (check mark when on)
+- **Layout: columns** (hosts side by side; GPUs in each host also in one row) or **Layout: rows** (hosts and GPUs stacked)
+
+`alwaysOnTop` and `horizontalLayout` persist in `%AppData%\LlmHostMonitor\machines.json`. The title bar shows `N/N up`. Columns mode shrinks the window height to the cards.
+
 ## How it works
 
 The Windows app polls two HTTP endpoints on each host (every 5 seconds by default):
@@ -114,7 +121,7 @@ dotnet publish -c Release -r win-x64 --self-contained false -o publish
 - **Add machine** (+): enter a name, the LLM base URL (`http://YOUR_HOST:8080`) and the GPU metrics URL (`http://YOUR_HOST:9835/metrics`).
 - **Edit** / **Remove**: select a card first.
 - **Refresh**: poll all hosts now.
-- **Pin**: toggles always-on-top. The setting is saved.
+- **Right-click menu**: Add / Edit / Remove, Refresh, Always on top, Layout columns or rows. Pin and layout are saved.
 
 On first run the app adds one example machine pointing at `127.0.0.1`. Edit or remove it.
 
@@ -126,6 +133,7 @@ Settings are saved to `%AppData%\LlmHostMonitor\machines.json`:
 {
   "pollSeconds": 5,
   "alwaysOnTop": false,
+  "horizontalLayout": false,
   "machines": [
     {
       "id": "a1b2c3d4",

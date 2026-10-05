@@ -54,10 +54,10 @@ public sealed class MainForm : Form
         var n = Math.Max(1, _config.Machines.Count(m => m.Enabled));
         if (horizontal)
         {
-            var w = Math.Max(520, 44 + n * 300);
-            var h = Math.Max(360, 200 + 40 * 2);
-            Size = new Size(w, h);
-            MinimumSize = new Size(420, 260);
+            // Wide enough for side-by-side hosts with GPUs in a row; short to cut empty space.
+            var w = Math.Max(640, 48 + n * 360);
+            Size = new Size(w, 160);
+            MinimumSize = new Size(480, 120);
         }
         else
         {
@@ -65,6 +65,26 @@ public sealed class MainForm : Form
             Size = new Size(Math.Max(Width, 640), h);
             MinimumSize = new Size(420, 180);
         }
+    }
+
+    /// <summary>
+    /// Shrink (or grow) the window height to the tallest card's content so horizontal
+    /// mode has no empty band under the hosts.
+    /// </summary>
+    private void FitToContent()
+    {
+        if (!_config.HorizontalLayout || _cards.Count == 0) return;
+        var contentH = _cards.Values.Max(c => c.PreferredContentHeight);
+        if (contentH < 56) contentH = 56;
+        const int toolbarH = 44;
+        var listPad = _list.Padding.Vertical;
+        var chrome = Height - ClientSize.Height;
+        var target = chrome + toolbarH + listPad + contentH + 4;
+        var n = _cards.Count;
+        var minW = Math.Max(MinimumSize.Width, 48 + n * 340);
+        if (Width < minW) Width = minW;
+        if (Height != target)
+            Height = Math.Max(MinimumSize.Height, target);
     }
 
     public MainForm()
@@ -209,7 +229,7 @@ public sealed class MainForm : Form
             if (horizontal)
             {
                 card.Dock = DockStyle.Left;
-                card.Width = 300;
+                card.Width = 340;
             }
             else
             {
@@ -223,6 +243,7 @@ public sealed class MainForm : Form
         }
         _list.ResumeLayout(true);
         ResizeCards();
+        FitToContent();
     }
 
     private MachineCard? _selected;
@@ -244,15 +265,14 @@ public sealed class MainForm : Form
         if (horizontal)
         {
             const int gap = 6;
-            var availH = Math.Max(160, _list.ClientSize.Height - _list.Padding.Vertical);
             var availW = Math.Max(240, _list.ClientSize.Width - _list.Padding.Horizontal - Math.Max(0, n - 1) * gap);
-            var cardW = Math.Max(240, availW / n);
+            var cardW = Math.Max(280, availW / n);
             foreach (Control c in _list.Controls)
             {
                 if (c is MachineCard card)
                 {
                     card.Width = cardW;
-                    card.Height = availH;
+                    // Height comes from Dock.Left filling the list; FitToContent sizes the form.
                     card.SetColumnMode(true);
                 }
             }
@@ -349,6 +369,7 @@ public sealed class MainForm : Form
             var nextStatus = $"{up}/{results.Length} up";
             if (!string.Equals(_status.Text, nextStatus, StringComparison.Ordinal))
                 _status.Text = nextStatus;
+            FitToContent();
         }
         finally
         {
@@ -356,5 +377,3 @@ public sealed class MainForm : Form
         }
     }
 }
-
-
