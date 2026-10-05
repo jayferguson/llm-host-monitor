@@ -12,8 +12,10 @@ There is no toolbar. **Right-click** the window or a host card for the menu (lef
 - Add / Edit / Remove machine, Refresh now
 - **Always on top** (check mark when on)
 - **Layout: columns** (hosts side by side; GPUs in each host also in one row) or **Layout: rows** (hosts and GPUs stacked)
+- **Hide title bar** (borderless window): left-drag anywhere to move, drag the thin edge to resize; the menu still opens on right-click
+- **Close** (exits; useful when the title bar is hidden)
 
-`alwaysOnTop` and `horizontalLayout` persist in `%AppData%\LlmHostMonitor\machines.json`. The title bar shows `N/N up`. Columns mode shrinks the window height to the cards.
+`alwaysOnTop`, `horizontalLayout` and `hideTitleBar` persist in `%AppData%\LlmHostMonitor\machines.json`. The title bar shows `N/N up`. Columns mode shrinks the window height to the cards.
 
 ## How it works
 
@@ -121,7 +123,7 @@ dotnet publish -c Release -r win-x64 --self-contained false -o publish
 - **Add machine** (+): enter a name, the LLM base URL (`http://YOUR_HOST:8080`) and the GPU metrics URL (`http://YOUR_HOST:9835/metrics`).
 - **Edit** / **Remove**: select a card first.
 - **Refresh**: poll all hosts now.
-- **Right-click menu**: Add / Edit / Remove, Refresh, Always on top, Layout columns or rows. Pin and layout are saved.
+- **Right-click menu**: Add / Edit / Remove, Refresh, Always on top, Hide title bar, Layout columns or rows, Close. Pin, title bar and layout are saved.
 
 On first run the app adds one example machine pointing at `127.0.0.1`. Edit or remove it.
 
@@ -134,6 +136,7 @@ Settings are saved to `%AppData%\LlmHostMonitor\machines.json`:
   "pollSeconds": 5,
   "alwaysOnTop": false,
   "horizontalLayout": false,
+  "hideTitleBar": false,
   "machines": [
     {
       "id": "a1b2c3d4",

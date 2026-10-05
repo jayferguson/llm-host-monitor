@@ -7,6 +7,7 @@ public sealed class MainForm : Form
     private readonly Panel _list;
     private readonly ContextMenuStrip _menu;
     private readonly ToolStripMenuItem _alwaysItem;
+    private readonly ToolStripMenuItem _hideTitleItem;
     private readonly ToolStripMenuItem _columnsItem;
     private readonly ToolStripMenuItem _rowsItem;
     private readonly System.Windows.Forms.Timer _timer;
@@ -16,6 +17,9 @@ public sealed class MainForm : Form
     private int _generation;
     private bool _busy;
     private bool _fitting;
+    private bool _dragPending;
+    private bool _dragMoved;
+    private Point _dragOrigin;
 
     private const int CardGap = 4;
 
@@ -25,12 +29,13 @@ public sealed class MainForm : Form
         MinimumSize = new Size(280, 64);
         Size = new Size(640, 140);
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = Color.FromArgb(8, 11, 16);
+        BackColor = CanvasColor;
         ForeColor = Color.WhiteSmoke;
         Font = new Font("Segoe UI", 9.5f);
         DoubleBuffered = true;
 
         _alwaysItem = new ToolStripMenuItem("Always on top");
+        _hideTitleItem = new ToolStripMenuItem("Hide title bar");
         _columnsItem = new ToolStripMenuItem("Layout: columns (side by side)");
         _rowsItem = new ToolStripMenuItem("Layout: rows (stacked)");
         _menu = BuildMenu();
@@ -41,7 +46,7 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             AutoScroll = false,
             Padding = new Padding(4, 1, 4, 1),
-            BackColor = Color.FromArgb(8, 11, 16),
+            BackColor = CanvasColor,
             ContextMenuStrip = _menu,
         };
         _list.Resize += (_, _) =>
@@ -52,6 +57,12 @@ public sealed class MainForm : Form
         _list.MouseUp += (_, e) =>
         {
             if (e.Button != MouseButtons.Left) return;
+            // A borderless drag starts from MouseMove; don't also open the menu.
+            if (_dragMoved)
+            {
+                _dragMoved = false;
+                return;
+            }
             if (_list.GetChildAtPoint(e.Location) is not null) return;
             _menu.Show(_list, e.Location);
             RaiseContextMenu();
@@ -61,6 +72,8 @@ public sealed class MainForm : Form
 
         _config = MachineStore.Load();
         SetAlwaysOnTop(_config.AlwaysOnTop, save: false);
+        SetHideTitleBar(_config.HideTitleBar, save: false);
+        WireBorderlessDrag(this);
         RebuildCards();
         _ = Handle;
 
@@ -84,15 +97,20 @@ public sealed class MainForm : Form
         menu.Items.Add("Refresh now", null, async (_, _) => await PollOnceAsync());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_alwaysItem);
+        menu.Items.Add(_hideTitleItem);
         menu.Items.Add(_columnsItem);
         menu.Items.Add(_rowsItem);
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Close", null, (_, _) => Close());
 
         _alwaysItem.Click += (_, _) => SetAlwaysOnTop(!TopMost, save: true);
+        _hideTitleItem.Click += (_, _) => SetHideTitleBar(!_config.HideTitleBar, save: true);
         _columnsItem.Click += (_, _) => SetHorizontalLayout(true, save: true, rebuild: true);
         _rowsItem.Click += (_, _) => SetHorizontalLayout(false, save: true, rebuild: true);
         menu.Opening += (_, _) =>
         {
             _alwaysItem.Checked = TopMost;
+            _hideTitleItem.Checked = _config.HideTitleBar;
             _columnsItem.Checked = _config.HorizontalLayout;
             _rowsItem.Checked = !_config.HorizontalLayout;
         };
@@ -106,10 +124,32 @@ public sealed class MainForm : Form
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_SHOWWINDOW = 0x0040;
+    private const int WM_NCHITTEST = 0x84;
+    private const int WM_NCLBUTTONDOWN = 0xA1;
+    private const int HTCLIENT = 1;
+    private const int HTCAPTION = 2;
+    private const int HTLEFT = 10;
+    private const int HTRIGHT = 11;
+    private const int HTTOP = 12;
+    private const int HTTOPLEFT = 13;
+    private const int HTTOPRIGHT = 14;
+    private const int HTBOTTOM = 15;
+    private const int HTBOTTOMLEFT = 16;
+    private const int HTBOTTOMRIGHT = 17;
+    private const int BorderlessPad = 3;
+    private const int BorderlessGrip = 4;
     private static readonly IntPtr HWND_TOPMOST = new(-1);
+    private static readonly Color CanvasColor = Color.FromArgb(8, 11, 16);
+    private static readonly Color BorderlessEdgeColor = Color.FromArgb(40, 46, 56);
 
     [DllImport("user32.dll")]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
     private void RaiseContextMenu()
     {
@@ -127,6 +167,103 @@ public sealed class MainForm : Form
             MachineStore.Save(_config);
         }
     }
+
+    private void SetHideTitleBar(bool on, bool save)
+    {
+        var changed = _config.HideTitleBar != on;
+        _config.HideTitleBar = on;
+        if (save && changed)
+            MachineStore.Save(_config);
+        ApplyBorderlessChrome();
+        if (save)
+            FitToContent();
+    }
+
+    /// <summary>
+    /// Borderless client area has no caption, so keep the client origin put
+    /// and put TopMost back after the style change (that change clears it).
+    /// </summary>
+    private void ApplyBorderlessChrome()
+    {
+        var on = _config.HideTitleBar;
+        Point? origin = null;
+        if (Visible && IsHandleCreated)
+            origin = PointToScreen(Point.Empty);
+        var topMost = TopMost;
+        var wasFitting = _fitting;
+        _fitting = true;
+        try
+        {
+            FormBorderStyle = on ? FormBorderStyle.None : FormBorderStyle.Sizable;
+            Padding = on ? new Padding(BorderlessPad) : Padding.Empty;
+            BackColor = on ? BorderlessEdgeColor : CanvasColor;
+            TopMost = topMost;
+            if (topMost && IsHandleCreated)
+                SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            if (origin is Point saved && IsHandleCreated)
+            {
+                var now = PointToScreen(Point.Empty);
+                if (now != saved)
+                    Location = new Point(Location.X + saved.X - now.X, Location.Y + saved.Y - now.Y);
+            }
+        }
+        finally
+        {
+            _fitting = wasFitting;
+        }
+    }
+
+    private void WireBorderlessDrag(Control control)
+    {
+        control.MouseDown -= OnBorderlessMouseDown;
+        control.MouseMove -= OnBorderlessMouseMove;
+        control.MouseUp -= OnBorderlessMouseUp;
+        control.MouseDown += OnBorderlessMouseDown;
+        control.MouseMove += OnBorderlessMouseMove;
+        control.MouseUp += OnBorderlessMouseUp;
+        control.ControlAdded -= OnBorderlessControlAdded;
+        control.ControlAdded += OnBorderlessControlAdded;
+        foreach (Control child in control.Controls)
+            WireBorderlessDrag(child);
+    }
+
+    private void OnBorderlessControlAdded(object? sender, ControlEventArgs e)
+    {
+        if (e.Control is Control added)
+            WireBorderlessDrag(added);
+    }
+
+    private void OnBorderlessMouseDown(object? sender, MouseEventArgs e)
+    {
+        if (!_config.HideTitleBar || e.Button != MouseButtons.Left)
+            return;
+        _dragPending = true;
+        _dragMoved = false;
+        _dragOrigin = ScreenPoint(sender, e);
+    }
+
+    private void OnBorderlessMouseMove(object? sender, MouseEventArgs e)
+    {
+        if (!_dragPending || !_config.HideTitleBar || e.Button != MouseButtons.Left)
+            return;
+        var now = ScreenPoint(sender, e);
+        var drag = SystemInformation.DragSize;
+        if (Math.Abs(now.X - _dragOrigin.X) <= drag.Width && Math.Abs(now.Y - _dragOrigin.Y) <= drag.Height)
+            return;
+        _dragPending = false;
+        _dragMoved = true;
+        ReleaseCapture();
+        SendMessage(Handle, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
+    }
+
+    private void OnBorderlessMouseUp(object? sender, MouseEventArgs e)
+    {
+        if (e.Button == MouseButtons.Left)
+            _dragPending = false;
+    }
+
+    private static Point ScreenPoint(object? sender, MouseEventArgs e) =>
+        sender is Control control ? control.PointToScreen(e.Location) : Cursor.Position;
 
     private void SetHorizontalLayout(bool horizontal, bool save, bool rebuild)
     {
@@ -245,10 +382,11 @@ public sealed class MainForm : Form
     private bool ApplyWindowFit()
     {
         var pad = _list.Padding;
+        var frame = Padding;
         var contentH = ContentHeight();
         var contentW = ContentWidth();
-        var rawH = ChromeHeight() + pad.Vertical + contentH;
-        var rawW = ChromeWidth() + pad.Horizontal + contentW;
+        var rawH = ChromeHeight() + pad.Vertical + frame.Vertical + contentH;
+        var rawW = ChromeWidth() + pad.Horizontal + frame.Horizontal + contentW;
 
         var area = IsHandleCreated
             ? Screen.FromControl(this).WorkingArea
@@ -305,6 +443,7 @@ public sealed class MainForm : Form
 
     private int ChromeHeight()
     {
+        if (_config.HideTitleBar) return 0;
         if (!IsHandleCreated) return SystemInformation.CaptionHeight + SystemInformation.FrameBorderSize.Height * 2;
         var delta = Height - ClientSize.Height;
         return delta > 0 ? delta : SystemInformation.CaptionHeight + SystemInformation.FrameBorderSize.Height * 2;
@@ -312,9 +451,42 @@ public sealed class MainForm : Form
 
     private int ChromeWidth()
     {
+        if (_config.HideTitleBar) return 0;
         if (!IsHandleCreated) return SystemInformation.FrameBorderSize.Width * 2;
         var delta = Width - ClientSize.Width;
         return delta > 0 ? delta : SystemInformation.FrameBorderSize.Width * 2;
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WM_NCHITTEST && _config.HideTitleBar)
+        {
+            base.WndProc(ref m);
+            if (m.Result == (IntPtr)HTCLIENT)
+                m.Result = BorderlessResizeHit(m.LParam);
+            return;
+        }
+        base.WndProc(ref m);
+    }
+
+    private IntPtr BorderlessResizeHit(IntPtr lParam)
+    {
+        var lp = unchecked((int)lParam.ToInt64());
+        var screen = new Point((short)(lp & 0xFFFF), (short)((lp >> 16) & 0xFFFF));
+        var pt = PointToClient(screen);
+        var onLeft = pt.X < BorderlessGrip;
+        var onRight = pt.X >= ClientSize.Width - BorderlessGrip;
+        var onTop = pt.Y < BorderlessGrip;
+        var onBottom = pt.Y >= ClientSize.Height - BorderlessGrip;
+        if (onTop && onLeft) return (IntPtr)HTTOPLEFT;
+        if (onTop && onRight) return (IntPtr)HTTOPRIGHT;
+        if (onBottom && onLeft) return (IntPtr)HTBOTTOMLEFT;
+        if (onBottom && onRight) return (IntPtr)HTBOTTOMRIGHT;
+        if (onLeft) return (IntPtr)HTLEFT;
+        if (onRight) return (IntPtr)HTRIGHT;
+        if (onTop) return (IntPtr)HTTOP;
+        if (onBottom) return (IntPtr)HTBOTTOM;
+        return (IntPtr)HTCLIENT;
     }
 
     private void AddMachine()

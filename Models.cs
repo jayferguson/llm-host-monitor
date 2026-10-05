@@ -15,6 +15,8 @@ public sealed class AppConfig
     public bool AlwaysOnTop { get; set; }
     /// <summary>True = systems side-by-side (each a column). False = stacked (each a row).</summary>
     public bool HorizontalLayout { get; set; }
+    /// <summary>True = borderless window (no title bar). Drag anywhere to move; edges resize.</summary>
+    public bool HideTitleBar { get; set; }
     public List<MachineConfig> Machines { get; set; } = new();
 }
 
