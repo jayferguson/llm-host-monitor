@@ -7,7 +7,7 @@ It is built for Linux boxes running [llama.cpp](https://github.com/ggml-org/llam
 
 ## Layout
 
-Toolbar layout button (next to the always-on-top pin) toggles **rows** (systems stacked) vs **columns** (systems side by side). The choice is stored in `%AppData%\\LlmHostMonitor\\machines.json` as `horizontalLayout`, same file as `alwaysOnTop`.
+Toolbar layout button (next to the always-on-top pin) toggles **rows** (systems stacked) vs **columns** (systems side by side). The choice is stored in `%AppData%\LlmHostMonitor\machines.json` as `horizontalLayout`, same file as `alwaysOnTop`.
 ## How it works
 
 The Windows app polls two HTTP endpoints on each host (every 5 seconds by default):
