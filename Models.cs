@@ -17,7 +17,21 @@ public sealed class AppConfig
     public bool HorizontalLayout { get; set; }
     /// <summary>True = borderless window (no title bar). Drag anywhere to move; edges resize.</summary>
     public bool HideTitleBar { get; set; }
+    /// <summary>Card text and metric scale. 1.0 is the design size.</summary>
+    public double UiScale { get; set; } = 1.0;
     public List<MachineConfig> Machines { get; set; } = new();
+
+    public const double UiScaleMin = 0.7;
+    public const double UiScaleMax = 2.0;
+    public const double UiScaleStep = 1.1;
+
+    /// <summary>Missing, 0, NaN, and infinities are 1.0. Anything else is clamped to [0.7, 2.0].</summary>
+    public static double NormalizeUiScale(double scale)
+    {
+        if (!double.IsFinite(scale) || scale == 0d)
+            return 1d;
+        return Math.Clamp(scale, UiScaleMin, UiScaleMax);
+    }
 }
 
 public sealed class GpuInfo

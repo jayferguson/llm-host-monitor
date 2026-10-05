@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace LlmHostMonitor;
 
-public sealed class MainForm : Form
+public sealed class MainForm : Form, IMessageFilter
 {
     private readonly Panel _list;
     private readonly ContextMenuStrip _menu;
@@ -33,6 +33,7 @@ public sealed class MainForm : Form
         ForeColor = Color.WhiteSmoke;
         Font = new Font("Segoe UI", 9.5f);
         DoubleBuffered = true;
+        KeyPreview = true;
 
         _alwaysItem = new ToolStripMenuItem("Always on top");
         _hideTitleItem = new ToolStripMenuItem("Hide title bar");
@@ -85,7 +86,14 @@ public sealed class MainForm : Form
             await PollOnceAsync();
             _timer.Start();
         };
-        FormClosed += (_, _) => _timer.Stop();
+        // Ctrl+wheel is delivered to the child under the cursor. Take it here so
+        // every card sees it, and so the list does not scroll at the same time.
+        Application.AddMessageFilter(this);
+        FormClosed += (_, _) =>
+        {
+            Application.RemoveMessageFilter(this);
+            _timer.Stop();
+        };
     }
 
     private ContextMenuStrip BuildMenu()
@@ -100,6 +108,9 @@ public sealed class MainForm : Form
         menu.Items.Add(_hideTitleItem);
         menu.Items.Add(_columnsItem);
         menu.Items.Add(_rowsItem);
+        menu.Items.Add("Larger text", null, (_, _) => IncreaseUiScale());
+        menu.Items.Add("Smaller text", null, (_, _) => DecreaseUiScale());
+        menu.Items.Add("Reset text size", null, (_, _) => ResetUiScale());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Close", null, (_, _) => Close());
 
@@ -124,6 +135,7 @@ public sealed class MainForm : Form
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_SHOWWINDOW = 0x0040;
+    private const int WM_MOUSEWHEEL = 0x020A;
     private const int WM_NCHITTEST = 0x84;
     private const int WM_NCLBUTTONDOWN = 0xA1;
     private const int HTCLIENT = 1;
@@ -277,6 +289,40 @@ public sealed class MainForm : Form
             RebuildCards();
     }
 
+    private void IncreaseUiScale() => SetUiScale(_config.UiScale * AppConfig.UiScaleStep);
+
+    private void DecreaseUiScale() => SetUiScale(_config.UiScale / AppConfig.UiScaleStep);
+
+    private void ResetUiScale() => SetUiScale(1d);
+
+    private void SetUiScale(double scale)
+    {
+        scale = AppConfig.NormalizeUiScale(scale);
+        if (Math.Abs(scale - _config.UiScale) < 1e-9)
+            return;
+        _config.UiScale = scale;
+        MachineStore.Save(_config);
+        ApplyUiScale();
+    }
+
+    private void ApplyUiScale()
+    {
+        var scale = AppConfig.NormalizeUiScale(_config.UiScale);
+        _config.UiScale = scale;
+        var wasFitting = _fitting;
+        _fitting = true;
+        try
+        {
+            foreach (var card in _cards.Values)
+                card.ApplyScale(scale);
+        }
+        finally
+        {
+            _fitting = wasFitting;
+        }
+        FitToContent();
+    }
+
     private void RebuildCards()
     {
         _list.SuspendLayout();
@@ -287,6 +333,7 @@ public sealed class MainForm : Form
         foreach (var m in _config.Machines.Where(x => x.Enabled))
         {
             var card = new MachineCard(m);
+            card.ApplyScale(_config.UiScale);
             card.SetColumnMode(horizontal);
             card.AttachContextMenu(_menu);
             card.CardClicked += (_, _) => SelectCard(card);
@@ -455,6 +502,62 @@ public sealed class MainForm : Form
         if (!IsHandleCreated) return SystemInformation.FrameBorderSize.Width * 2;
         var delta = Width - ClientSize.Width;
         return delta > 0 ? delta : SystemInformation.FrameBorderSize.Width * 2;
+    }
+
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        var mods = keyData & Keys.Modifiers;
+        if ((mods & Keys.Control) == Keys.Control && (mods & Keys.Alt) == 0)
+        {
+            switch (keyData & Keys.KeyCode)
+            {
+                case Keys.Oemplus:
+                case Keys.Add:
+                    IncreaseUiScale();
+                    return true;
+                case Keys.OemMinus:
+                case Keys.Subtract:
+                    DecreaseUiScale();
+                    return true;
+                case Keys.D0:
+                case Keys.NumPad0:
+                    ResetUiScale();
+                    return true;
+            }
+        }
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        if (TryScaleFromWheel(e.Delta))
+        {
+            if (e is HandledMouseEventArgs handled)
+                handled.Handled = true;
+            return;
+        }
+        base.OnMouseWheel(e);
+    }
+
+    public bool PreFilterMessage(ref Message m)
+    {
+        if (m.Msg != WM_MOUSEWHEEL || IsDisposed || !ContainsFocus)
+            return false;
+        var delta = (short)(unchecked((int)(long)m.WParam) >> 16);
+        return TryScaleFromWheel(delta);
+    }
+
+    private bool TryScaleFromWheel(int delta)
+    {
+        if ((ModifierKeys & Keys.Control) != Keys.Control || (ModifierKeys & Keys.Alt) == Keys.Alt)
+            return false;
+        if (delta > 0)
+            IncreaseUiScale();
+        else if (delta < 0)
+            DecreaseUiScale();
+        else
+            return false;
+        return true;
     }
 
     protected override void WndProc(ref Message m)

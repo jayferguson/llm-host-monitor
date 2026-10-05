@@ -21,7 +21,11 @@ public static class MachineStore
             if (File.Exists(ConfigPath))
             {
                 var cfg = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(ConfigPath), JsonOpts);
-                if (cfg?.Machines is { Count: > 0 }) return cfg;
+                if (cfg?.Machines is { Count: > 0 })
+                {
+                    cfg.UiScale = AppConfig.NormalizeUiScale(cfg.UiScale);
+                    return cfg;
+                }
             }
         }
         catch { }
@@ -49,3 +53,4 @@ public static class MachineStore
         ],
     };
 }
+

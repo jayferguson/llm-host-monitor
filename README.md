@@ -13,9 +13,10 @@ There is no toolbar. **Right-click** the window or a host card for the menu (lef
 - **Always on top** (check mark when on)
 - **Layout: columns** (hosts side by side; GPUs in each host also in one row) or **Layout: rows** (hosts and GPUs stacked)
 - **Hide title bar** (borderless window): left-drag anywhere to move, drag the thin edge to resize; the menu still opens on right-click
+- **Larger text** / **Smaller text** / **Reset text size** (also Ctrl+Plus / Ctrl+Minus / Ctrl+0, and Ctrl+mouse wheel). Scales card text, bars and spacing; the window refits.
 - **Close** (exits; useful when the title bar is hidden)
 
-`alwaysOnTop`, `horizontalLayout` and `hideTitleBar` persist in `%AppData%\LlmHostMonitor\machines.json`. The title bar shows `N/N up`. Columns mode shrinks the window height to the cards.
+`alwaysOnTop`, `horizontalLayout`, `hideTitleBar` and `uiScale` persist in `%AppData%\LlmHostMonitor\machines.json`. The title bar shows `N/N up`. Columns mode shrinks the window height to the cards.
 
 ## How it works
 
@@ -123,7 +124,7 @@ dotnet publish -c Release -r win-x64 --self-contained false -o publish
 - **Add machine** (+): enter a name, the LLM base URL (`http://YOUR_HOST:8080`) and the GPU metrics URL (`http://YOUR_HOST:9835/metrics`).
 - **Edit** / **Remove**: select a card first.
 - **Refresh**: poll all hosts now.
-- **Right-click menu**: Add / Edit / Remove, Refresh, Always on top, Hide title bar, Layout columns or rows, Close. Pin, title bar and layout are saved.
+- **Right-click menu**: Add / Edit / Remove, Refresh, Always on top, Hide title bar, Layout columns or rows, Larger/Smaller/Reset text size, Close. Pin, title bar, layout and text size are saved.
 
 On first run the app adds one example machine pointing at `127.0.0.1`. Edit or remove it.
 
@@ -137,6 +138,7 @@ Settings are saved to `%AppData%\LlmHostMonitor\machines.json`:
   "alwaysOnTop": false,
   "horizontalLayout": false,
   "hideTitleBar": false,
+  "uiScale": 1.0,
   "machines": [
     {
       "id": "a1b2c3d4",
