@@ -1,22 +1,21 @@
 # LLM Host Monitor
 
-A small Windows desktop app that shows the status of your local LLM hosts as a vertical stack of cards. Each card shows the host state (ACTIVE / IDLE / DOWN), the loaded model, its context size, total VRAM, and per-GPU VRAM use, utilization, temperature and power.
+A small Windows desktop app that shows the status of your local LLM hosts as cards. Arrange them in **rows** (stacked) or **columns** (side by side, including each host's GPUs in one row). Each card shows the host state (ACTIVE / IDLE / DOWN), the loaded model, its context size, total VRAM, and per-GPU VRAM use, utilization, temperature and power.
 
 It is built for Linux boxes running [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` on NVIDIA GPUs.
 
-
 ## Layout and controls
 
-There is no toolbar. **Right-click** the window or a host card for the menu (left-click on empty background also opens it):
+There is no toolbar. **Right-click** the window or a host card for the menu (left-click on empty list background also opens it):
 
-- Add / Edit / Remove machine, Refresh now
-- **Always on top** (check mark when on)
-- **Layout: columns** (hosts side by side; GPUs in each host also in one row) or **Layout: rows** (hosts and GPUs stacked)
-- **Hide title bar** (borderless window): left-drag anywhere to move, drag the thin edge to resize; the menu still opens on right-click
-- **Larger text** / **Smaller text** / **Reset text size** (also Ctrl+Plus / Ctrl+Minus / Ctrl+0). While the window has focus, the mouse wheel anywhere over it changes text size, with or without Ctrl: up = larger, down = smaller (the wheel no longer scrolls the card list). Scales card text, bars and spacing; the window refits.
+- **Add machine...** / **Edit selected...** / **Remove selected...** / **Refresh now**
+- **Always on top** (check mark when on; pin)
+- **Layout: columns (side by side)** or **Layout: rows (stacked)**
+- **Hide title bar** (borderless): left-drag anywhere to move, drag the thin lighter edge to resize; right-click still opens the menu
+- **Larger text** / **Smaller text** / **Reset text size** — also **Ctrl+Plus**, **Ctrl+Minus**, **Ctrl+0**. While the window has focus, the **mouse wheel** anywhere over it changes text size (with or without Ctrl): up = larger, down = smaller. Range about 70%–200% in ~10% steps. Scales card text, bars and spacing; the window refits. The wheel no longer scrolls the card list.
 - **Close** (exits; useful when the title bar is hidden)
 
-`alwaysOnTop`, `horizontalLayout`, `hideTitleBar` and `uiScale` persist in `%AppData%\LlmHostMonitor\machines.json`. The title bar shows `N/N up`. Columns mode shrinks the window height to the cards.
+Settings `alwaysOnTop`, `horizontalLayout`, `hideTitleBar` and `uiScale` persist in `%AppData%\LlmHostMonitor\machines.json`. When the title bar is visible it shows `N/N up`. Columns mode shrinks the window height to the cards.
 
 ## How it works
 
@@ -121,10 +120,10 @@ dotnet publish -c Release -r win-x64 --self-contained false -o publish
 
 ### Using it
 
-- **Add machine** (+): enter a name, the LLM base URL (`http://YOUR_HOST:8080`) and the GPU metrics URL (`http://YOUR_HOST:9835/metrics`).
-- **Edit** / **Remove**: select a card first.
-- **Refresh**: poll all hosts now.
-- **Right-click menu**: Add / Edit / Remove, Refresh, Always on top, Hide title bar, Layout columns or rows, Larger/Smaller/Reset text size, Close. Pin, title bar, layout and text size are saved.
+- **Add machine...**: enter a name, the LLM base URL (`http://YOUR_HOST:8080`) and the GPU metrics URL (`http://YOUR_HOST:9835/metrics`).
+- **Edit selected...** / **Remove selected...**: select a card first.
+- **Refresh now**: poll all hosts immediately.
+- **Right-click menu**: Add / Edit / Remove, Refresh, Always on top, Hide title bar, Layout columns or rows, Larger/Smaller/Reset text size, Close. Pin, title bar, layout and text size are saved (see Config).
 
 On first run the app adds one example machine pointing at `127.0.0.1`. Edit or remove it.
 
