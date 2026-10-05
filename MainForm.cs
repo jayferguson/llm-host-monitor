@@ -86,7 +86,7 @@ public sealed class MainForm : Form, IMessageFilter
             await PollOnceAsync();
             _timer.Start();
         };
-        // Ctrl+wheel is delivered to the child under the cursor. Take it here so
+        // The wheel is delivered to the child under the cursor. Take it here so
         // every card sees it, and so the list does not scroll at the same time.
         Application.AddMessageFilter(this);
         FormClosed += (_, _) =>
@@ -541,7 +541,8 @@ public sealed class MainForm : Form, IMessageFilter
 
     public bool PreFilterMessage(ref Message m)
     {
-        if (m.Msg != WM_MOUSEWHEEL || IsDisposed || !ContainsFocus)
+        // Plain wheel (or Ctrl+wheel) anywhere over the focused window changes text size.
+        if (m.Msg != WM_MOUSEWHEEL || IsDisposed || !ContainsFocus || !Bounds.Contains(Cursor.Position))
             return false;
         var delta = (short)(unchecked((int)(long)m.WParam) >> 16);
         return TryScaleFromWheel(delta);
@@ -549,7 +550,7 @@ public sealed class MainForm : Form, IMessageFilter
 
     private bool TryScaleFromWheel(int delta)
     {
-        if ((ModifierKeys & Keys.Control) != Keys.Control || (ModifierKeys & Keys.Alt) == Keys.Alt)
+        if ((ModifierKeys & Keys.Alt) == Keys.Alt)
             return false;
         if (delta > 0)
             IncreaseUiScale();

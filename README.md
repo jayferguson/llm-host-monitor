@@ -13,7 +13,7 @@ There is no toolbar. **Right-click** the window or a host card for the menu (lef
 - **Always on top** (check mark when on)
 - **Layout: columns** (hosts side by side; GPUs in each host also in one row) or **Layout: rows** (hosts and GPUs stacked)
 - **Hide title bar** (borderless window): left-drag anywhere to move, drag the thin edge to resize; the menu still opens on right-click
-- **Larger text** / **Smaller text** / **Reset text size** (also Ctrl+Plus / Ctrl+Minus / Ctrl+0, and Ctrl+mouse wheel). Scales card text, bars and spacing; the window refits.
+- **Larger text** / **Smaller text** / **Reset text size** (also Ctrl+Plus / Ctrl+Minus / Ctrl+0). While the window has focus, the mouse wheel anywhere over it changes text size, with or without Ctrl: up = larger, down = smaller (the wheel no longer scrolls the card list). Scales card text, bars and spacing; the window refits.
 - **Close** (exits; useful when the title bar is hidden)
 
 `alwaysOnTop`, `horizontalLayout`, `hideTitleBar` and `uiScale` persist in `%AppData%\LlmHostMonitor\machines.json`. The title bar shows `N/N up`. Columns mode shrinks the window height to the cards.
