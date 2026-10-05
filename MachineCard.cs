@@ -8,6 +8,7 @@ public sealed class MachineCard : Panel
     private readonly Label _error;
     private readonly Panel _gpus;
     private HostStatus? _last;
+    private bool _columnMode;
 
     public string MachineId { get; }
 
@@ -72,8 +73,40 @@ public sealed class MachineCard : Panel
         LayoutHeader();
     }
 
+    public void SetColumnMode(bool column)
+    {
+        if (_columnMode == column) { LayoutHeader(); return; }
+        _columnMode = column;
+        MinimumSize = column ? new Size(220, 120) : new Size(280, 56);
+        Margin = column ? new Padding(0, 0, 6, 0) : new Padding(0, 0, 0, 6);
+        LayoutHeader();
+    }
     private void LayoutHeader()
     {
+        if (_columnMode)
+        {
+            // Column: title + state on top, model below, then GPUs stacked.
+            _title.Location = new Point(8, 6);
+            _title.MaximumSize = new Size(Math.Max(60, Width - _state.PreferredWidth - 28), 0);
+            _state.Location = new Point(Math.Max(_title.Right + 8, Width - _state.PreferredWidth - 12), 7);
+            _model.MaximumSize = new Size(Math.Max(80, Width - 20), 0);
+            _model.Location = new Point(8, Math.Max(26, _title.Bottom + 2));
+            _error.Width = Math.Max(80, Width - 20);
+            _error.Location = new Point(8, _model.Bottom + 2);
+            var gpusTop = _error.Visible ? _error.Bottom + 4 : _model.Bottom + 6;
+            _gpus.Location = new Point(6, gpusTop);
+            _gpus.Width = Math.Max(80, ClientSize.Width - 12);
+            StretchGpuChips();
+            // Fill parent height when docked as a column; don't shrink-wrap.
+            if (Dock == DockStyle.Left || Dock == DockStyle.Fill)
+                return;
+            var bottom = _gpus.Controls.Count == 0 ? gpusTop + 4 : _gpus.Bottom;
+            Height = Math.Max(120, bottom + 8);
+            return;
+        }
+
+        // Row: title | model ........ state, GPUs below.
+        _title.MaximumSize = Size.Empty;
         _title.Location = new Point(8, 6);
         _model.Location = new Point(_title.Right + 10, 6);
         _state.Location = new Point(Math.Max(_model.Right + 8, Width - _state.PreferredWidth - 12), 7);
@@ -81,12 +114,12 @@ public sealed class MachineCard : Panel
         _model.MaximumSize = new Size(maxModel, 0);
         _error.Width = Math.Max(80, Width - 20);
         _error.Location = new Point(8, 26);
-        var gpusTop = _error.Visible ? 44 : 28;
-        _gpus.Location = new Point(6, gpusTop);
+        var gpusTopRow = _error.Visible ? 44 : 28;
+        _gpus.Location = new Point(6, gpusTopRow);
         _gpus.Width = Math.Max(80, ClientSize.Width - 12);
         StretchGpuChips();
-        var bottom = _gpus.Controls.Count == 0 ? gpusTop + 4 : _gpus.Bottom;
-        Height = Math.Max(56, bottom + 8);
+        var bottomRow = _gpus.Controls.Count == 0 ? gpusTopRow + 4 : _gpus.Bottom;
+        Height = Math.Max(56, bottomRow + 8);
     }
 
     private void StretchGpuChips()

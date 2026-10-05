@@ -13,6 +13,8 @@ public sealed class AppConfig
 {
     public int PollSeconds { get; set; } = 5;
     public bool AlwaysOnTop { get; set; }
+    /// <summary>True = systems side-by-side (each a column). False = stacked (each a row).</summary>
+    public bool HorizontalLayout { get; set; }
     public List<MachineConfig> Machines { get; set; } = new();
 }
 

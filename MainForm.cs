@@ -5,13 +5,15 @@ public sealed class MainForm : Form
     private readonly Panel _list;
     private readonly Label _status;
     private readonly System.Windows.Forms.Timer _timer;
-    private AppConfig _config;
+    private AppConfig _config = new();
     private readonly Dictionary<string, MachineCard> _cards = new();
     private int _generation;
     private bool _busy;
     private static readonly Font IconFont = new(PickIconFamily(), 11f);
     private readonly Button _pinBtn;
+    private readonly Button _layoutBtn;
     private readonly ToolTip _pinTips;
+    private readonly ToolTip _layoutTips;
 
     private void SetAlwaysOnTop(bool on, bool save)
     {
@@ -23,6 +25,45 @@ public sealed class MainForm : Form
         {
             _config.AlwaysOnTop = on;
             MachineStore.Save(_config);
+        }
+    }
+
+    private void SetHorizontalLayout(bool horizontal, bool save, bool rebuild)
+    {
+        // Horizontal = systems side by side (each a column). Vertical = stacked (each a row).
+        _layoutBtn.Text = horizontal ? "\uE80A" : "\uE8A9";
+        _layoutBtn.BackColor = horizontal ? Color.FromArgb(40, 70, 100) : Color.FromArgb(32, 42, 58);
+        _layoutTips.SetToolTip(_layoutBtn,
+            horizontal
+                ? "Layout: columns (side by side). Click for rows (stacked)."
+                : "Layout: rows (stacked). Click for columns (side by side).");
+        if (save && _config.HorizontalLayout != horizontal)
+        {
+            _config.HorizontalLayout = horizontal;
+            MachineStore.Save(_config);
+        }
+        if (rebuild)
+        {
+            FitWindowForLayout(horizontal);
+            RebuildCards();
+        }
+    }
+
+    private void FitWindowForLayout(bool horizontal)
+    {
+        var n = Math.Max(1, _config.Machines.Count(m => m.Enabled));
+        if (horizontal)
+        {
+            var w = Math.Max(520, 44 + n * 300);
+            var h = Math.Max(360, 200 + 40 * 2);
+            Size = new Size(w, h);
+            MinimumSize = new Size(420, 260);
+        }
+        else
+        {
+            var h = Math.Max(220, 80 + n * 90);
+            Size = new Size(Math.Max(Width, 640), h);
+            MinimumSize = new Size(420, 180);
         }
     }
 
@@ -63,11 +104,15 @@ public sealed class MainForm : Form
         _pinTips = tips;
         _pinBtn.Click += (_, _) => SetAlwaysOnTop(!TopMost, save: true);
 
+        _layoutBtn = MakeIconBtn("\uE8A9", 188, Color.FromArgb(180, 200, 230));
+        _layoutTips = tips;
+        _layoutBtn.Click += (_, _) => SetHorizontalLayout(!_config.HorizontalLayout, save: true, rebuild: true);
+
         _status = new Label
         {
             AutoSize = true,
             ForeColor = Color.FromArgb(140, 160, 180),
-            Location = new Point(196, 12),
+            Location = new Point(232, 12),
             Text = "starting.",
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
         };
@@ -77,10 +122,11 @@ public sealed class MainForm : Form
         toolbar.Controls.Add(removeBtn);
         toolbar.Controls.Add(refreshBtn);
         toolbar.Controls.Add(_pinBtn);
+        toolbar.Controls.Add(_layoutBtn);
         toolbar.Controls.Add(_status);
         toolbar.Resize += (_, _) =>
         {
-            _status.Left = Math.Max(196, toolbar.Width - _status.PreferredWidth - 12);
+            _status.Left = Math.Max(232, toolbar.Width - _status.PreferredWidth - 12);
         };
 
         _list = new Panel
@@ -97,6 +143,9 @@ public sealed class MainForm : Form
 
         _config = MachineStore.Load();
         SetAlwaysOnTop(_config.AlwaysOnTop, save: false);
+        SetHorizontalLayout(_config.HorizontalLayout, save: false, rebuild: false);
+        if (_config.HorizontalLayout)
+            FitWindowForLayout(true);
         RebuildCards();
 
         _timer = new System.Windows.Forms.Timer { Interval = Math.Max(2, _config.PollSeconds) * 1000 };
@@ -145,14 +194,28 @@ public sealed class MainForm : Form
         _list.SuspendLayout();
         _list.Controls.Clear();
         _cards.Clear();
-        foreach (var m in _config.Machines.Where(x => x.Enabled).Reverse())
+        var horizontal = _config.HorizontalLayout;
+        var machines = _config.Machines.Where(x => x.Enabled).ToList();
+        // Dock.Top/Left: first added takes the leading edge. Reverse so config order
+        // reads top-to-bottom (vertical) or left-to-right (horizontal).
+        var order = machines.AsEnumerable().Reverse();
+        foreach (var m in order)
         {
             var card = new MachineCard(m)
             {
-                Dock = DockStyle.Top,
-                Height = 72,
-                Margin = new Padding(0, 0, 0, 6),
+                Margin = horizontal ? new Padding(0, 0, 6, 0) : new Padding(0, 0, 0, 6),
             };
+            card.SetColumnMode(horizontal);
+            if (horizontal)
+            {
+                card.Dock = DockStyle.Left;
+                card.Width = 300;
+            }
+            else
+            {
+                card.Dock = DockStyle.Top;
+                card.Height = 72;
+            }
             card.Click += (_, _) => SelectCard(card);
             foreach (Control c in card.Controls) c.Click += (_, _) => SelectCard(card);
             _cards[m.Id] = card;
@@ -174,11 +237,37 @@ public sealed class MainForm : Form
 
     private void ResizeCards()
     {
-        var inner = Math.Max(280, _list.ClientSize.Width - _list.Padding.Horizontal);
-        foreach (Control c in _list.Controls)
+        var horizontal = _config.HorizontalLayout;
+        var n = _list.Controls.OfType<MachineCard>().Count();
+        if (n == 0) return;
+
+        if (horizontal)
         {
-            if (c is MachineCard)
-                c.Width = inner;
+            const int gap = 6;
+            var availH = Math.Max(160, _list.ClientSize.Height - _list.Padding.Vertical);
+            var availW = Math.Max(240, _list.ClientSize.Width - _list.Padding.Horizontal - Math.Max(0, n - 1) * gap);
+            var cardW = Math.Max(240, availW / n);
+            foreach (Control c in _list.Controls)
+            {
+                if (c is MachineCard card)
+                {
+                    card.Width = cardW;
+                    card.Height = availH;
+                    card.SetColumnMode(true);
+                }
+            }
+        }
+        else
+        {
+            var inner = Math.Max(280, _list.ClientSize.Width - _list.Padding.Horizontal);
+            foreach (Control c in _list.Controls)
+            {
+                if (c is MachineCard card)
+                {
+                    card.Width = inner;
+                    card.SetColumnMode(false);
+                }
+            }
         }
     }
 
@@ -267,3 +356,5 @@ public sealed class MainForm : Form
         }
     }
 }
+
+
