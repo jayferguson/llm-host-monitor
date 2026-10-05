@@ -3,3 +3,5 @@ obj/
 *.user
 .vs/
 machines.json
+*.local.*
+_shots/
