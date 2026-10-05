@@ -7,62 +7,69 @@ public sealed class MachineCard : Panel
     private readonly Label _state;
     private readonly Label _error;
     private readonly Panel _gpus;
-    private HostStatus? _last;
+    private ContextMenuStrip? _menu;
     private bool _columnMode;
+    private bool _inLayout;
 
     public string MachineId { get; }
 
-    /// <summary>Shrink-wrap height for the card contents (header + GPU row/stack).</summary>
-    public int PreferredContentHeight { get; private set; } = 56;
+    /// <summary>Card height that fits the header plus the GPU row or stack.</summary>
+    public int PreferredContentHeight { get; private set; } = 52;
+
+    /// <summary>Card width that fits the header and every GPU chip without clipping.</summary>
+    public int PreferredContentWidth { get; private set; } = 280;
+
+    public event EventHandler? CardClicked;
 
     public MachineCard(MachineConfig cfg)
     {
         MachineId = cfg.Id;
         DoubleBuffered = true;
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
-        Margin = new Padding(0, 0, 0, 6);
+        Margin = Padding.Empty;
         Padding = new Padding(8, 6, 8, 6);
-        MinimumSize = new Size(280, 56);
+        MinimumSize = new Size(80, 32);
         BackColor = Color.FromArgb(12, 18, 26);
         BorderStyle = BorderStyle.FixedSingle;
 
         _title = new Label
         {
-            AutoSize = true,
+            AutoSize = false,
+            AutoEllipsis = true,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
             ForeColor = Color.FromArgb(140, 160, 180),
             Text = cfg.Name.ToUpperInvariant(),
-            Location = new Point(8, 6),
+            Location = new Point(8, 5),
         };
         _model = new Label
         {
-            AutoSize = true,
+            AutoSize = false,
+            AutoEllipsis = true,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
             ForeColor = Color.FromArgb(230, 236, 245),
             Text = ".",
-            Location = new Point(80, 6),
+            Location = new Point(80, 5),
         };
         _state = new Label
         {
-            AutoSize = true,
+            AutoSize = false,
             Font = new Font("Segoe UI", 8f, FontStyle.Bold),
             ForeColor = Color.FromArgb(140, 160, 180),
             Text = ".",
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            TextAlign = ContentAlignment.MiddleRight,
         };
         _error = new Label
         {
             AutoSize = false,
+            AutoEllipsis = true,
             Font = new Font("Segoe UI", 8f),
             ForeColor = Color.FromArgb(255, 120, 120),
             Text = "",
-            Location = new Point(8, 26),
-            Height = 16,
             Visible = false,
         };
         _gpus = new Panel
         {
-            Location = new Point(6, 28),
+            Location = new Point(6, 24),
             Height = 32,
             BackColor = Color.Transparent,
         };
@@ -72,44 +79,72 @@ public sealed class MachineCard : Panel
         Controls.Add(_state);
         Controls.Add(_error);
         Controls.Add(_gpus);
-        Resize += (_, _) => LayoutHeader();
         LayoutHeader();
+    }
+
+    public void AttachContextMenu(ContextMenuStrip menu)
+    {
+        _menu = menu;
+        BindMenu(this);
     }
 
     public void SetColumnMode(bool column)
     {
-        if (_columnMode == column) { LayoutHeader(); return; }
         _columnMode = column;
-        // Horizontal (column) mode: compact height; GPUs sit in one row.
-        MinimumSize = column ? new Size(200, 56) : new Size(280, 56);
-        Margin = column ? new Padding(0, 0, 6, 0) : new Padding(0, 0, 0, 6);
         LayoutHeader();
     }
 
+    private void BindMenu(Control c)
+    {
+        if (_menu is not null)
+            c.ContextMenuStrip = _menu;
+        c.MouseDown -= OnChildMouseDown;
+        c.MouseDown += OnChildMouseDown;
+        foreach (Control child in c.Controls)
+            BindMenu(child);
+    }
+
+    private void OnChildMouseDown(object? sender, MouseEventArgs e) =>
+        CardClicked?.Invoke(this, EventArgs.Empty);
+
     private void LayoutHeader()
     {
-        // Both modes: single-line header (name | model ........ state).
-        _title.MaximumSize = Size.Empty;
-        _title.Location = new Point(8, 6);
-        _model.MaximumSize = Size.Empty;
-        _model.Location = new Point(_title.Right + 10, 6);
-        _state.Location = new Point(Math.Max(_model.Right + 8, Width - _state.PreferredWidth - 12), 7);
-        var maxModel = Math.Max(40, _state.Left - _model.Left - 8);
-        _model.MaximumSize = new Size(maxModel, 0);
+        if (_inLayout) return;
+        _inLayout = true;
+        try
+        {
+            var innerW = Math.Max(40, ClientSize.Width);
+            var titleH = _title.Font.Height + 2;
+            var stateW = TextWidth(_state) + 4;
+            var stateH = _state.Font.Height + 2;
+            _state.SetBounds(Math.Max(8, innerW - stateW - 8), 4, stateW, stateH);
 
-        _error.Width = Math.Max(80, Width - 20);
-        _error.Location = new Point(8, 26);
-        var gpusTop = _error.Visible ? 44 : 28;
-        _gpus.Location = new Point(6, gpusTop);
-        _gpus.Width = Math.Max(80, ClientSize.Width - 12);
-        StretchGpuChips();
+            var titleMax = Math.Max(48, Math.Max(0, _state.Left - 16) / 2);
+            var titleW = Math.Min(Math.Max(TextWidth(_title) + 2, 24), titleMax);
+            _title.SetBounds(8, 4, titleW, titleH);
 
-        var bottom = _gpus.Controls.Count == 0 ? gpusTop + 4 : _gpus.Bottom;
-        PreferredContentHeight = Math.Max(56, bottom + 8);
+            var modelLeft = _title.Right + 8;
+            var modelW = Math.Max(12, _state.Left - modelLeft - 6);
+            _model.SetBounds(modelLeft, 4, modelW, _model.Font.Height + 2);
 
-        // Dock.Left stretches to parent height; only set Height when not dock-filling.
-        if (Dock != DockStyle.Left && Dock != DockStyle.Fill)
-            Height = PreferredContentHeight;
+            var headerBottom = Math.Max(_title.Bottom, Math.Max(_model.Bottom, _state.Bottom));
+            _error.SetBounds(8, headerBottom + 1, Math.Max(40, innerW - 16), _error.Font.Height + 2);
+            var gpusTop = _error.Visible ? _error.Bottom + 2 : headerBottom + 2;
+
+            _gpus.Location = new Point(4, gpusTop);
+            _gpus.Width = Math.Max(40, innerW - 8);
+            StretchGpuChips();
+
+            var bottom = _gpus.Controls.Count == 0 ? gpusTop : _gpus.Bottom;
+            // bottom is in client coordinates; add the non-client border so the
+            // last pixel of the GPU row is not clipped by the card edge.
+            PreferredContentHeight = HeightForClient(bottom + 4);
+            PreferredContentWidth = Math.Max(PreferredContentWidth, WidthForClient(HeaderClientWidth()));
+        }
+        finally
+        {
+            _inLayout = false;
+        }
     }
 
     private void StretchGpuChips()
@@ -117,98 +152,256 @@ public sealed class MachineCard : Panel
         var n = _gpus.Controls.Count;
         if (n == 0)
         {
-            _gpus.Height = 4;
+            _gpus.Height = 0;
+            PreferredContentWidth = WidthForClient(Math.Max(180, HeaderClientWidth()));
             return;
         }
-        const int gap = 4;
-        const int chipH = 32;
-        var avail = Math.Max(160, _gpus.ClientSize.Width);
 
+        const int gap = 4;
+        var chipH = 0;
+        var mins = new int[n];
+        for (var i = 0; i < n; i++)
+        {
+            chipH = Math.Max(chipH, ChipOuterHeight(_gpus.Controls[i]));
+            mins[i] = MeasureChipWidth(_gpus.Controls[i]);
+        }
+
+        var avail = Math.Max(40, _gpus.ClientSize.Width);
         if (_columnMode)
         {
-            // Side-by-side devices in one row (minimize vertical space).
-            var chipW = Math.Max(168, (avail - Math.Max(0, n - 1) * gap) / n);
+            var sumMin = 0;
+            for (var i = 0; i < n; i++) sumMin += mins[i];
+            var gaps = Math.Max(0, n - 1) * gap;
+            var extra = Math.Max(0, avail - sumMin - gaps);
+            var each = extra / n;
+            var rem = extra % n;
+            var x = 0;
             for (var i = 0; i < n; i++)
             {
+                var chipW = mins[i] + each + (i == 0 ? rem : 0);
                 var chip = _gpus.Controls[i];
-                chip.Margin = Padding.Empty;
-                chip.Location = new Point(i * (chipW + gap), 0);
-                chip.Size = new Size(chipW, chipH);
-                ResizeChipContents(chip, chipW);
+                chip.SetBounds(x, 0, chipW, chipH);
+                LayoutChip(chip, chipW);
+                x += chipW + gap;
             }
             _gpus.Height = chipH;
+            // _gpus is inset 4px on each side of the client area.
+            PreferredContentWidth = WidthForClient(sumMin + gaps + 8);
             return;
         }
 
-        // Vertical: devices stacked.
+        var minW = 0;
+        for (var i = 0; i < n; i++) minW = Math.Max(minW, mins[i]);
+        var chipWFull = Math.Max(avail, minW);
         for (var i = 0; i < n; i++)
         {
             var chip = _gpus.Controls[i];
-            chip.Margin = Padding.Empty;
-            chip.Location = new Point(0, i * (chipH + gap));
-            chip.Size = new Size(avail, chipH);
-            ResizeChipContents(chip, avail);
+            chip.SetBounds(0, i * (chipH + gap), chipWFull, chipH);
+            LayoutChip(chip, chipWFull);
         }
         _gpus.Height = n * chipH + Math.Max(0, n - 1) * gap;
+        PreferredContentWidth = WidthForClient(minW + 8);
     }
 
-    private static void ResizeChipContents(Control chip, int width)
+    private int HeaderClientWidth() =>
+        8 + TextWidth(_title) + 8 + 40 + 8 + TextWidth(_state) + 10;
+
+    private int WidthForClient(int clientWidth)
     {
-        Label? power = null;
-        foreach (Control c in chip.Controls)
+        var border = Width - ClientSize.Width;
+        if (border < 2) border = 2;
+        return clientWidth + border;
+    }
+
+    private int HeightForClient(int clientHeight)
+    {
+        var border = Height - ClientSize.Height;
+        if (border < 2) border = 2;
+        return clientHeight + border;
+    }
+
+    private static int ChipOuterHeight(Control chip) =>
+        2 + ChipTextHeight(chip) + 1 + ChipMeterHeight(chip) + 2;
+
+    private static int ChipTextHeight(Control chip)
+    {
+        var name = FindTagged(chip, "gpu-name") as Label;
+        var power = FindTagged(chip, "gpu-power") as Label;
+        return Math.Max(name?.Font.Height ?? 12, power?.Font.Height ?? 12) + 2;
+    }
+
+    private static int ChipMeterHeight(Control chip) =>
+        Math.Max(MeterLineHeight(FindTagged(chip, "vram")), MeterLineHeight(FindTagged(chip, "util"))) + 2;
+
+    private static int MeterLineHeight(Control? wrap)
+    {
+        var h = 12;
+        if (wrap is null) return h;
+        foreach (Control inner in wrap.Controls)
         {
-            if (c is Label pwr && pwr.Tag as string == "gpu-power")
-                power = pwr;
+            if (inner is Label lab)
+                h = Math.Max(h, lab.Font.Height);
         }
-        var powerW = power?.PreferredWidth ?? 56;
-        // Keep temp/power fully visible inside the chip.
+        return h;
+    }
+
+    /// <summary>Width the chip needs so temp/power and both percents sit fully inside.</summary>
+    private static int MeasureChipWidth(Control chip)
+    {
+        var name = FindTagged(chip, "gpu-name") as Label;
+        var power = FindTagged(chip, "gpu-power") as Label;
+        var nameCap = name is null ? 48 : Math.Max(36, name.Font.Height * 8);
+        var nameW = name is null ? 48 : Math.Min(nameCap, Math.Max(36, TextWidth(name)));
+        var powerW = PowerSlotWidth(power);
+        var header = 6 + nameW + 6 + powerW + 4;
+
+        var vramW = MeterMinWidth(FindTagged(chip, "vram"));
+        var utilW = MeterMinWidth(FindTagged(chip, "util"));
+        var meters = 6 + vramW + 6 + utilW + 4;
+        return Math.Max(header, meters);
+    }
+
+    private static int PowerSlotWidth(Label? power)
+    {
+        if (power is null) return 64;
+        // PreferredWidth (via TextWidth) sizes the temp/power string. +4 keeps
+        // the last glyph inside the chip after the label is given an explicit width.
+        return TextWidth(power) + 4;
+    }
+
+    private static int MeterMinWidth(Control? wrap)
+    {
+        if (wrap is null) return 96;
+        SplitMeter(wrap, out var cap, out _, out var val);
+        var capW = cap is null ? 28 : TextWidth(cap) + 2;
+        var valW = PercentSlotWidth(val);
+        const int minTrack = 16;
+        return capW + 3 + minTrack + 3 + valW;
+    }
+
+    private static int PercentSlotWidth(Label? val)
+    {
+        if (val is null) return 36;
+        var full = TextRenderer.MeasureText("100%", val.Font, Size.Empty, TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine).Width;
+        return Math.Max(TextWidth(val), full) + 4;
+    }
+
+    private static void LayoutChip(Control chip, int width)
+    {
+        var name = FindTagged(chip, "gpu-name") as Label;
+        var power = FindTagged(chip, "gpu-power") as Label;
+        var textH = ChipTextHeight(chip);
+        var powerW = PowerSlotWidth(power);
         if (power is not null)
-            power.Left = Math.Max(70, width - powerW - 6);
-
-        foreach (Control c in chip.Controls)
         {
-            if (c is Label lab && lab.Tag as string == "gpu-name")
-                lab.Width = Math.Max(40, width - powerW - 18);
-            if (c is Panel wrap && wrap.Tag as string == "vram")
-            {
-                wrap.Width = Math.Max(70, (width - 12) / 2 - 3);
-                SizeMeter(wrap);
-            }
-            if (c is Panel wrap2 && wrap2.Tag as string == "util")
-            {
-                var vram = FindTagged(chip, "vram");
-                wrap2.Left = (vram?.Right ?? 96) + 6;
-                wrap2.Width = Math.Max(70, width - wrap2.Left - 6);
-                SizeMeter(wrap2);
-            }
+            power.AutoSize = false;
+            power.TextAlign = ContentAlignment.MiddleRight;
+            var powerLeft = Math.Max(2, width - powerW - 4);
+            power.SetBounds(powerLeft, 2, powerW, textH);
         }
-    }
+        if (name is not null)
+        {
+            name.AutoSize = false;
+            name.AutoEllipsis = true;
+            var right = (power?.Left ?? width) - 4;
+            name.SetBounds(6, 2, Math.Max(8, right - 6), textH);
+        }
 
-    private static Control? FindTagged(Control parent, string tag)
-    {
-        foreach (Control c in parent.Controls)
-            if (c.Tag as string == tag) return c;
-        return null;
+        var vram = FindTagged(chip, "vram");
+        var util = FindTagged(chip, "util");
+        if (vram is null || util is null) return;
+
+        var meterTop = 2 + textH + 1;
+        var meterH = ChipMeterHeight(chip);
+        const int leftPad = 6;
+        const int rightPad = 4;
+        const int gap = 6;
+        var inner = Math.Max(0, width - leftPad - rightPad);
+        var vramMin = MeterMinWidth(vram);
+        var utilMin = MeterMinWidth(util);
+        var extra = Math.Max(0, inner - vramMin - utilMin - gap);
+        var vramW = vramMin + extra / 2;
+        var utilW = Math.Max(utilMin, inner - gap - vramW);
+        // Keep the util chip, including its percent, inside the GPU chip.
+        if (leftPad + vramW + gap + utilW > width - rightPad)
+            utilW = Math.Max(8, width - rightPad - leftPad - vramW - gap);
+
+        vram.SetBounds(leftPad, meterTop, vramW, meterH);
+        util.SetBounds(leftPad + vramW + gap, meterTop, utilW, meterH);
+        SizeMeter(vram);
+        SizeMeter(util);
     }
 
     private static void SizeMeter(Control wrap)
     {
-        foreach (Control inner in wrap.Controls)
+        SplitMeter(wrap, out var cap, out var track, out var val);
+        var line = Math.Max(1, wrap.Height);
+        var capW = 0;
+        if (cap is not null)
         {
-            if (inner is Panel track && track.Tag is double pct)
+            capW = TextWidth(cap) + 2;
+            cap.AutoSize = false;
+            cap.SetBounds(0, 0, capW, line);
+        }
+        var valW = PercentSlotWidth(val);
+        if (val is not null)
+        {
+            val.AutoSize = false;
+            val.TextAlign = ContentAlignment.MiddleRight;
+            var valLeft = Math.Max(0, wrap.Width - valW);
+            val.SetBounds(valLeft, 0, valW, line);
+        }
+        if (track is not null)
+        {
+            var left = capW + 3;
+            var right = (val?.Left ?? wrap.Width) - 3;
+            var trackW = Math.Max(2, right - left);
+            const int trackH = 6;
+            track.SetBounds(left, Math.Max(0, (line - trackH) / 2), trackW, trackH);
+            if (track.Tag is double pct && track.Controls.Count > 0)
             {
-                track.Width = Math.Max(24, wrap.Width - 68);
-                if (track.Controls.Count > 0)
-                    track.Controls[0].Width = (int)Math.Round(Math.Clamp(pct, 0, 100) / 100.0 * track.Width);
+                var fill = track.Controls[0];
+                fill.Height = track.Height;
+                fill.Width = (int)Math.Round(Math.Clamp(pct, 0, 100) / 100.0 * track.Width);
             }
-            if (inner is Label val && val.TextAlign == ContentAlignment.MiddleRight)
-                val.Left = Math.Max(40, wrap.Width - val.Width - 2);
         }
     }
 
+    private static void SplitMeter(Control wrap, out Label? cap, out Panel? track, out Label? val)
+    {
+        cap = null;
+        track = null;
+        val = null;
+        foreach (Control inner in wrap.Controls)
+        {
+            if (inner is Panel panel && panel.Tag is double)
+                track = panel;
+            else if (inner is Label lab)
+            {
+                if (lab.TextAlign == ContentAlignment.MiddleRight) val = lab;
+                else if (cap is null) cap = lab;
+                else val ??= lab;
+            }
+        }
+    }
+
+    private static int TextWidth(Label label)
+    {
+        if (label.Text.Length == 0) return 0;
+        var measured = Measured(label);
+        var preferred = label.PreferredWidth;
+        // PreferredWidth is the text width while AutoSize is on. After the label
+        // is given an explicit width, it can echo that width and grow every pass.
+        if (preferred <= 0 || (!label.AutoSize && Math.Abs(preferred - label.Width) <= 1))
+            return measured;
+        return Math.Max(preferred, measured);
+    }
+
+    private static int Measured(Label label) =>
+        TextRenderer.MeasureText(label.Text, label.Font, Size.Empty, TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine).Width;
+
     public void Apply(HostStatus status)
     {
-        _last = status;
         SetText(_title, status.Name.ToUpperInvariant());
         var model = string.IsNullOrWhiteSpace(status.ModelLabel)
             ? (string.IsNullOrWhiteSpace(status.Model) ? "-" : status.Model)
@@ -261,16 +454,9 @@ public sealed class MachineCard : Panel
             SetText(_error, "");
         }
 
-        var structureChanged = SyncGpuChips(status.Gpus);
-        if (structureChanged || _error.Visible != _lastErrorVisible)
-        {
-            _lastErrorVisible = _error.Visible;
-            LayoutHeader();
-        }
+        SyncGpuChips(status.Gpus);
+        LayoutHeader();
     }
-
-    private bool _lastErrorVisible;
-
 
     private static string FormatHeaderModel(string model, long? totalVramBytes, int? contextTokens)
     {
@@ -288,6 +474,7 @@ public sealed class MachineCard : Panel
         }
         return string.Join("  ", parts);
     }
+
     private static void SetText(Label label, string text)
     {
         if (!string.Equals(label.Text, text, StringComparison.Ordinal))
@@ -296,7 +483,6 @@ public sealed class MachineCard : Panel
 
     private bool SyncGpuChips(IReadOnlyList<GpuInfo> gpus)
     {
-        // Rebuild only when GPU count/identity changes; otherwise update meters in place.
         var needRebuild = _gpus.Controls.Count != gpus.Count;
         if (!needRebuild)
         {
@@ -317,8 +503,8 @@ public sealed class MachineCard : Panel
             _gpus.Controls.Clear();
             foreach (var g in gpus)
                 _gpus.Controls.Add(BuildGpuChip(g));
-            _gpus.ResumeLayout(true);
-            StretchGpuChips();
+            _gpus.ResumeLayout(false);
+            BindMenu(_gpus);
             return true;
         }
 
@@ -384,17 +570,14 @@ public sealed class MachineCard : Panel
     {
         var panel = new Panel
         {
-            Width = 280,
-            Height = 32,
-            Margin = new Padding(0, 0, 6, 0),
+            Height = 36,
+            Margin = Padding.Empty,
             BackColor = Color.FromArgb(8, 12, 18),
         };
         var title = new Label
         {
             AutoSize = false,
-            Width = 90,
-            Height = 14,
-            Location = new Point(6, 2),
+            AutoEllipsis = true,
             Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
             ForeColor = Color.FromArgb(220, 228, 238),
             Text = g.Name,
@@ -406,38 +589,35 @@ public sealed class MachineCard : Panel
             Font = new Font("Consolas", 7.5f),
             ForeColor = TempColor(g.TempC),
             Text = (g.TempC is double t ? $"{t:0}\u00b0C" : "-") + "  " + (g.PowerW is double w ? $"{w:0}W" : "-"),
-            Location = new Point(200, 2),
+            TextAlign = ContentAlignment.MiddleRight,
             Tag = "gpu-power",
         };
         panel.Controls.Add(title);
         panel.Controls.Add(meta);
-        panel.Controls.Add(Meter("VRAM", g.VramPct, 6, 16, "vram"));
-        panel.Controls.Add(Meter("util", g.UtilPct, 150, 16, "util"));
+        panel.Controls.Add(Meter("VRAM", g.VramPct, "vram"));
+        panel.Controls.Add(Meter("util", g.UtilPct, "util"));
         return panel;
     }
 
-    private static Control Meter(string label, double? pct, int x, int y, string tag)
+    private static Control Meter(string label, double? pct, string tag)
     {
         var wrap = new Panel
         {
-            Location = new Point(x, y),
-            Size = new Size(140, 14),
+            Size = new Size(120, 14),
             BackColor = Color.Transparent,
             Tag = tag,
         };
         var lab = new Label
         {
             AutoSize = false,
-            Size = new Size(32, 12),
             Font = new Font("Segoe UI", 7f),
             ForeColor = Color.FromArgb(140, 160, 180),
             Text = label,
-            Location = new Point(0, 0),
+            TextAlign = ContentAlignment.MiddleLeft,
         };
         var track = new Panel
         {
-            Location = new Point(34, 3),
-            Size = new Size(72, 6),
+            Size = new Size(40, 6),
             BackColor = Color.FromArgb(30, 40, 55),
             Tag = pct ?? 0.0,
         };
@@ -451,9 +631,7 @@ public sealed class MachineCard : Panel
         track.Controls.Add(fill);
         var val = new Label
         {
-            AutoSize = false,
-            Size = new Size(34, 12),
-            Location = new Point(108, 0),
+            AutoSize = true,
             Font = new Font("Consolas", 7f),
             ForeColor = Color.FromArgb(200, 210, 220),
             Text = pct is double v ? $"{v:0}%" : "-",
@@ -485,5 +663,12 @@ public sealed class MachineCard : Panel
         if (c >= 80) return Color.FromArgb(230, 90, 90);
         if (c >= 70) return Color.FromArgb(230, 170, 70);
         return Color.FromArgb(140, 160, 180);
+    }
+
+    private static Control? FindTagged(Control parent, string tag)
+    {
+        foreach (Control c in parent.Controls)
+            if (c.Tag as string == tag) return c;
+        return null;
     }
 }
