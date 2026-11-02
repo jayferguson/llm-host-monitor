@@ -1,0 +1,9 @@
+title = "host/check.sh: OK on a healthy host, PROBLEMS FOUND (exit 1) on degraded and down hosts"
+feature_doc = "host-check.md"
+steps = [
+  { do = "check_sh", host = "active", expect_exit = 0, stdout_contains = ["model id: qwen3-coder-30b-a3b-q4_k_m", "n_ctx:    32768", "GPUs:     2", "ok        nvidia_smi_power_draw_watts", "OK"], stdout_not_contains = ["missing", "FAILED"] },
+  { do = "check_sh", host = "idle", expect_exit = 0, stdout_contains = ["model id: gemma4", "GPUs:     1"] },
+  { do = "check_sh", host = "degraded", expect_exit = 1, stdout_contains = ["FAILED: no response", "missing   nvidia_smi_power_draw_watts", "PROBLEMS FOUND"], why = "500 from llama-server is a failure; instant-only power is flagged" },
+  { do = "check_sh", host = "nogpu", expect_exit = 1, stdout_contains = ["GPUs:     0", "PROBLEMS FOUND"] },
+  { do = "check_sh", host = "down", expect_exit = 1, stdout_contains = ["FAILED: no response", "PROBLEMS FOUND"] },
+]

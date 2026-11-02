@@ -1,0 +1,26 @@
+title = "Prometheus parser edge cases: CRLF, comments, uuid-less series, N/A, percent utilization"
+feature_doc = "prometheus-parse.md"
+
+[[steps]]
+do = "parse"
+fixture = "edge-metrics"
+expect_count = 1
+[[steps.expect_gpus]]
+name = "2  GPU 4090"
+index = 2
+util_pct = 87.0
+temp_c_absent = true
+vram_total_bytes_absent = true
+vram_pct_absent = true
+why = "unknown code -> 'GPU 4090'; 87 > 1.5 is already a percent; N/A and a 0 total are dropped"
+
+[[steps]]
+do = "parse"
+fixture = "active"
+expect_count = 2
+why = "same parser on the served fixture"
+[[steps.expect_gpus]]
+index = 0
+name = "0  RTX 3090"
+[[steps.expect_gpus]]
+index = 1

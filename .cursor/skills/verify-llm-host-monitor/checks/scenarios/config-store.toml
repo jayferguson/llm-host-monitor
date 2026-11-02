@@ -1,0 +1,24 @@
+title = "machines.json store: defaults when missing/empty/corrupt, UiScale normalized on load"
+feature_doc = "config-store.md"
+steps = [
+  { do = "store", why = "no file: built-in default", expect = { machine_count = 1, first_machine_id = "llm-1", poll_seconds = 5, ui_scale = 1.0, config_path_in_sandbox = true } },
+  { do = "store", config_toml = '''
+poll_seconds = 9
+ui_scale = 5.0
+horizontal_layout = true
+machines = [ { id = "a1", name = "Example A", llm_base_url = "http://YOUR_HOST:8080", metrics_url = "http://YOUR_HOST:9835/metrics" } ]
+''', expect = { poll_seconds = 9, ui_scale = 2.0, horizontal_layout = true, machine_count = 1, first_machine_id = "a1" }, why = "UiScale above the 2.0 max is clamped" },
+  { do = "store", config_toml = '''
+ui_scale = 0.0
+machines = [ { id = "b1", name = "Example B" } ]
+''', expect = { ui_scale = 1.0, first_machine_id = "b1" }, why = "0 means unset: 1.0" },
+  { do = "store", config_toml = '''
+ui_scale = 0.3
+machines = [ { id = "c1", name = "Example C" } ]
+''', expect = { ui_scale = 0.7 }, why = "below the 0.7 min is clamped" },
+  { do = "store", config_toml = '''
+poll_seconds = 2
+machines = []
+''', expect = { machine_count = 1, first_machine_id = "llm-1", poll_seconds = 5 }, why = "no machines: fall back to the default config" },
+  { do = "store", raw = "{ not json", expect = { first_machine_id = "llm-1" }, why = "corrupt file: default, no crash" },
+]

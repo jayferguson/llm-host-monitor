@@ -1,0 +1,22 @@
+# Busy two-GPU host. Exporter text follows nvidia_gpu_exporter's shape (scientific
+# notation, gpu_info carrying name/index labels). GPU index 1 is listed first on
+# purpose: the app must sort by index. UUIDs are made up.
+models_status = 200
+models_json = '{"object":"list","data":[{"id":"qwen3-coder-30b-a3b-q4_k_m","object":"model","owned_by":"llamacpp","meta":{"n_ctx":32768}}]}'
+metrics_status = 200
+metrics = '''
+# HELP nvidia_smi_gpu_info A metric with a constant '1' value labeled by gpu uuid, name, driver_model_current, driver_model_pending, vbios_version, driver_version.
+# TYPE nvidia_smi_gpu_info gauge
+nvidia_smi_gpu_info{driver_version="570.00",index="1",name="NVIDIA GeForce RTX 5060 Ti",uuid="GPU-00000002-0000-0000-0000-000000000002"} 1
+nvidia_smi_gpu_info{driver_version="570.00",index="0",name="NVIDIA GeForce RTX 3090",uuid="GPU-00000001-0000-0000-0000-000000000001"} 1
+nvidia_smi_memory_total_bytes{uuid="GPU-00000002-0000-0000-0000-000000000002"} 1.7179869184e+10
+nvidia_smi_memory_used_bytes{uuid="GPU-00000002-0000-0000-0000-000000000002"} 4.294967296e+09
+nvidia_smi_utilization_gpu_ratio{uuid="GPU-00000002-0000-0000-0000-000000000002"} 0.05
+nvidia_smi_temperature_gpu{uuid="GPU-00000002-0000-0000-0000-000000000002"} 48
+nvidia_smi_power_draw_watts{uuid="GPU-00000002-0000-0000-0000-000000000002"} 35.04
+nvidia_smi_memory_total_bytes{uuid="GPU-00000001-0000-0000-0000-000000000001"} 2.5769803776e+10
+nvidia_smi_memory_used_bytes{uuid="GPU-00000001-0000-0000-0000-000000000001"} 1.2884901888e+10
+nvidia_smi_utilization_gpu_ratio{uuid="GPU-00000001-0000-0000-0000-000000000001"} 0.87
+nvidia_smi_temperature_gpu{uuid="GPU-00000001-0000-0000-0000-000000000001"} 66.4
+nvidia_smi_power_draw_watts{uuid="GPU-00000001-0000-0000-0000-000000000001"} 301.23
+'''

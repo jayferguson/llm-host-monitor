@@ -1,0 +1,40 @@
+title = "Busy two-GPU host: ACTIVE, model label, context, per-GPU stats sorted by index"
+feature_doc = "probe-active.md"
+
+[[steps]]
+do = "probe"
+hosts = ["active"]
+why = "MetricsClient.ProbeAsync against the stub, exactly as a card poll does"
+[steps.expect.active]
+metrics_ok = true
+llm_ok = true
+active = true
+model = "qwen3-coder-30b-a3b-q4_k_m"
+model_label = "Qwen3-Coder-30B-A3B"
+context_tokens = 32768
+total_vram_bytes = 42949672960
+gpu_count = 2
+error_absent = true
+[[steps.expect_gpus.active]]
+name = "0  RTX 3090"
+index = 0
+vram_pct = 50.0
+util_pct = 87.0
+temp_c = 66.0
+power_w = 301.2
+why = "index 0 sorts first although the exporter lists it second"
+[[steps.expect_gpus.active]]
+name = "1  RTX 5060 Ti"
+index = 1
+vram_pct = 25.0
+util_pct = 5.0
+temp_c = 48.0
+power_w = 35.0
+
+[[steps]]
+do = "expect_http"
+host = "active"
+port = 8080
+path = "/v1/models"
+contains = "n_ctx"
+why = "the stub really serves what the harness read"

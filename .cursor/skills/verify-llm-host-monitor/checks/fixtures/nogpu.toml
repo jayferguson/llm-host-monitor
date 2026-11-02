@@ -1,0 +1,10 @@
+# llama-server fine; the exporter answers but has no nvidia_smi series with a uuid
+# (driver not loaded). The app should say "no GPUs in metrics", not crash.
+models_status = 200
+models_json = '{"object":"list","data":[{"id":"some-unlisted-model","object":"model"}]}'
+metrics_status = 200
+metrics = '''
+# HELP go_goroutines Number of goroutines that currently exist.
+go_goroutines 9
+nvidia_smi_command_exit_code 9
+'''

@@ -1,0 +1,16 @@
+<!-- Template: verify.py copies this to scratch/harness/ and fills {REPO}. The
+     product's non-UI files are compiled by link; nothing in the repo is edited. -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>LlmHostMonitor.Verify</RootNamespace>
+    <AssemblyName>verify-harness</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+{LINKS}
+  </ItemGroup>
+</Project>

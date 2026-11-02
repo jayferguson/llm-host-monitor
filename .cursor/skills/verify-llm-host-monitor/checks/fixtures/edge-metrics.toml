@@ -1,0 +1,4 @@
+# Parser edge cases (not served; used by `parse` steps): comments, blank lines,
+# series without a uuid, a non-numeric value, utilization given as a percent (>1.5),
+# CRLF line endings, an unknown name code.
+metrics = "# a comment\r\n\r\nnvidia_smi_utilization_gpu_ratio{index=\"0\"} 0.5\r\nnvidia_smi_name{uuid=\"GPU-00000005-0000-0000-0000-000000000005\"} 4090\r\nnvidia_smi_index{uuid=\"GPU-00000005-0000-0000-0000-000000000005\"} 2\r\nnvidia_smi_utilization_gpu_ratio{uuid=\"GPU-00000005-0000-0000-0000-000000000005\"} 87\r\nnvidia_smi_temperature_gpu{uuid=\"GPU-00000005-0000-0000-0000-000000000005\"} N/A\r\nnvidia_smi_memory_total_bytes{uuid=\"GPU-00000005-0000-0000-0000-000000000005\"} 0\r\nnot_nvidia_metric{uuid=\"x\"} 1\r\n"

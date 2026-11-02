@@ -1,0 +1,37 @@
+title = "Failure modes: no GPUs, llama-server 500, host down; errors surface, nothing crashes"
+feature_doc = "probe-failures.md"
+
+[[steps]]
+do = "probe"
+hosts = ["nogpu", "degraded", "down"]
+why = "one poll round over three bad hosts"
+[steps.expect.nogpu]
+metrics_ok = false
+llm_ok = true
+active = false
+gpu_count = 0
+model = "some-unlisted-model"
+model_label = "some-unlisted-model"
+context_tokens_absent = true
+error_contains = "no GPUs in metrics"
+[steps.expect.degraded]
+metrics_ok = true
+llm_ok = false
+active = true
+model = ""
+total_vram_bytes = 17179869184
+gpu_count = 1
+error_contains = ["llm:", "500"]
+[steps.expect.down]
+metrics_ok = false
+llm_ok = false
+active = false
+gpu_count = 0
+model = ""
+error_contains = ["metrics:", "llm:"]
+[[steps.expect_gpus.degraded]]
+name = "0  RTX A4000"
+power_w = 55.0
+util_pct = 0.0
+vram_pct = 0.0
+why = "falls back to power_draw_instant_watts; 55 W >= 40 W counts as ACTIVE"

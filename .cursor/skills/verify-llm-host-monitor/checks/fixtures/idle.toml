@@ -1,0 +1,14 @@
+# Quiet one-GPU host on an older exporter: no gpu_info series, the GPU name is the
+# numeric nvidia_smi_name code (3090) and the index comes from nvidia_smi_index.
+models_status = 200
+models_json = '{"object":"list","data":[{"id":"gemma4","object":"model","meta":{"n_ctx":8192}}]}'
+metrics_status = 200
+metrics = '''
+nvidia_smi_name{uuid="GPU-00000003-0000-0000-0000-000000000003"} 3090
+nvidia_smi_index{uuid="GPU-00000003-0000-0000-0000-000000000003"} 0
+nvidia_smi_memory_total_bytes{uuid="GPU-00000003-0000-0000-0000-000000000003"} 2.5769803776e+10
+nvidia_smi_memory_used_bytes{uuid="GPU-00000003-0000-0000-0000-000000000003"} 1.073741824e+09
+nvidia_smi_utilization_gpu_ratio{uuid="GPU-00000003-0000-0000-0000-000000000003"} 0.01
+nvidia_smi_temperature_gpu{uuid="GPU-00000003-0000-0000-0000-000000000003"} 39
+nvidia_smi_power_draw_watts{uuid="GPU-00000003-0000-0000-0000-000000000003"} 22.5
+'''

@@ -1,0 +1,14 @@
+# llama-server returns 500 (model failed to load). The exporter only publishes the
+# instant power series: the app falls back to it, check.sh reports the regular one
+# missing.
+models_status = 500
+models_json = '{"error":{"code":500,"message":"loading model","type":"unavailable_error"}}'
+metrics_status = 200
+metrics = '''
+nvidia_smi_gpu_info{index="0",name="NVIDIA RTX A4000",uuid="GPU-00000004-0000-0000-0000-000000000004"} 1
+nvidia_smi_memory_total_bytes{uuid="GPU-00000004-0000-0000-0000-000000000004"} 1.7179869184e+10
+nvidia_smi_memory_used_bytes{uuid="GPU-00000004-0000-0000-0000-000000000004"} 0
+nvidia_smi_utilization_gpu_ratio{uuid="GPU-00000004-0000-0000-0000-000000000004"} 0
+nvidia_smi_temperature_gpu{uuid="GPU-00000004-0000-0000-0000-000000000004"} 41
+nvidia_smi_power_draw_instant_watts{uuid="GPU-00000004-0000-0000-0000-000000000004"} 55
+'''

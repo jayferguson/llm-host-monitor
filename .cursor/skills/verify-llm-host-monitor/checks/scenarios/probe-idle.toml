@@ -1,0 +1,24 @@
+title = "Quiet host on an older exporter: IDLE, name from numeric code, Gemma 4 label"
+feature_doc = "probe-idle.md"
+
+[[steps]]
+do = "probe"
+hosts = ["idle"]
+[steps.expect.idle]
+metrics_ok = true
+llm_ok = true
+active = false
+model = "gemma4"
+model_label = "Gemma 4"
+context_tokens = 8192
+total_vram_bytes = 25769803776
+gpu_count = 1
+error_absent = true
+[[steps.expect_gpus.idle]]
+name = "0  RTX 3090"
+index = 0
+vram_pct = 4.2
+util_pct = 1.0
+temp_c = 39.0
+power_w = 22.5
+why = "util 1% < 2% and 22.5 W < 40 W: not ACTIVE"

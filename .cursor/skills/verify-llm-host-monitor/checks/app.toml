@@ -1,0 +1,59 @@
+# Data for verify.py. Edit this file (and checks/fixtures/, checks/scenarios/),
+# not verify.py, when hosts, payloads or gate commands change. PUBLIC repo: no real
+# host names or addresses here; stubs live on 127.77.0.N only.
+
+# One stub host per entry. fixture = file stem in checks/fixtures/; "" = an address
+# with nothing listening (the DOWN case).
+hosts = [
+  { name = "active",   fixture = "active",   why = "two GPUs, one busy; Qwen3-Coder loaded" },
+  { name = "idle",     fixture = "idle",     why = "one GPU via legacy numeric name code; Gemma 4; quiet" },
+  { name = "nogpu",    fixture = "nogpu",    why = "llama-server up, exporter has no nvidia_smi series" },
+  { name = "degraded", fixture = "degraded", why = "llama-server 500s; exporter has only the instant power series" },
+  { name = "down",     fixture = "",         why = "nothing listening" },
+]
+
+[app]
+name = "llm-host-monitor"
+surface = "Windows WinForms app; on Linux the polling/parsing core runs headless in a .NET harness"
+
+[ports]          # fixed by the app and host/check.sh; stubs listen on these at spare 127.x addresses
+llm = 8080
+metrics = 9835
+
+[launch]
+addr_prefix = "127.77.0."
+addr_first = 10
+addr_last = 60
+
+[harness]
+# Product files compiled by link into the headless harness (no WinForms in these).
+link_files = ["MetricsClient.cs", "Models.cs", "MachineStore.cs"]
+
+[tools]
+dotnet_candidates = ["~/.dotnet/dotnet", "dotnet"]     # or set VERIFY_DOTNET
+
+[check_sh]
+path = "host/check.sh"
+
+[gate]
+main_ref = "origin/main"
+tests = []        # no test project in the repo; the journeys below are the tests
+typecheck = [
+  { name = "dotnet_build_app", cmd = ["{dotnet}", "build", "LlmHostMonitor.csproj", "-c", "Release", "-p:EnableWindowsTargeting=true", "-nologo"], timeout_s = 300, must_match = ['\b0 Warning\(s\)', '\b0 Error\(s\)'] },
+  { name = "bash_n_host_scripts", cmd = ["bash", "-c", "set -e; for f in host/*.sh; do bash -n \"$f\"; echo \"ok $f\"; done"], timeout_s = 30, must_match = ['ok host/check\.sh'] },
+]
+py_globs = [".cursor/skills/verify-llm-host-monitor/*.py"]
+lint = [
+  { name = "dotnet_format_whitespace", cmd = ["{dotnet}", "format", "whitespace", "LlmHostMonitor.csproj", "--verify-no-changes"], timeout_s = 300 },
+]
+private_scan = [
+  { name = "scan_diff.py", cmd = ["{python}", ".cursor/skills/verify-llm-host-monitor/scan_diff.py", "--json"], timeout_s = 60 },
+]
+scope_allow = []
+
+[gate.suggestions]
+tests = "A journey failed: the app's polling/parsing code or host/check.sh no longer gives the expected result for a fixture. Read evidence/<feature>/result.json (observed vs expected per step). Fix the product, or update the scenario/fixture only if the behaviour change was intended."
+typecheck = "The app no longer builds cleanly (warnings count), a host script has a bash syntax error, the skill's Python does not compile, or scenarios/features disagree."
+lint = "dotnet format whitespace found changes; run `dotnet format whitespace LlmHostMonitor.csproj` and review the diff."
+private_scan = "The diff adds something that looks private (host name, IP, tailnet name, GPU UUID, email, token, home path). This repo is PUBLIC; docs use YOUR_HOST. Remove it, or allow-list a proven false positive in checks/private_scan.toml."
+scope_check = "Files outside the skill dir changed (or the gate dirtied the tree). Skill-only changes must stay under .cursor/skills/verify-llm-host-monitor/; for a product change pass --allow-path for the intended files."
