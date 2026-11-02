@@ -50,4 +50,12 @@ Pushing straight to `main` is OK for this repo. Build first, push normally (no f
 
 ## Verify
 
-A `verify-llm-host-monitor` skill is being added by the Verify bot under `.cursor/skills/` (pending; not in the repo yet). Once it lands, prove every change with it before calling the work done.
+Prove every change with the `verify-llm-host-monitor` skill (`.cursor/skills/verify-llm-host-monitor/SKILL.md`) before calling the work done. It compiles the real `MetricsClient.cs`, `Models.cs` and `MachineStore.cs` into a headless .NET harness and runs them, plus `host/check.sh`, against stub hosts on spare `127.77.0.N` addresses. It never contacts a real host.
+
+From the repo root, with the .NET 9 SDK on `PATH`:
+
+```text
+python3 .cursor/skills/verify-llm-host-monitor/verify.py gate --json
+```
+
+A pass prints `"verdict": "pass"`: all 6 journeys (config-store, host-check, probe-active, probe-failures, probe-idle, prometheus-parse), the app build with 0 warnings and 0 errors, `bash -n host/*.sh`, `dotnet format whitespace --verify-no-changes`, the `scan_diff.py` leak scan, and a scope check. Since pushes go straight to `main`, check a commit with `verify.py gate --diff-base <commit>~1 --allow-path '<changed files>' --json`. The WinForms window is build-checked only, so report UI changes that way. `verify.py probe-live HOST --yes-read-only` is the only path to a real host (two GETs), and it never runs inside the gate. `verify.py --help` lists the other commands.
